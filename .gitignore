@@ -1,0 +1,44 @@
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+.build/
+.cache/
+.next/
+coverage/
+*.tsbuildinfo
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+.env
+.venv
+venv/
+venv3.*/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# MCP / runtime data
+.mcp/
+.mcp_cache/
+logs/
+*.log
+tmp/
+.cache_mcp/
+
+# OS / Editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Local overrides
+.env.local
+*.secret.json
