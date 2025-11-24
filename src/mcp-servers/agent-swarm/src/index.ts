@@ -294,7 +294,9 @@ function pickRoute(goal: string, category?: string): RouteTarget {
   const text = `${goal} ${category || ''}`.toLowerCase();
 
   // Documentation lookup via context7
-  if (text.includes('doc') || text.includes('manual') || text.includes('spec') || text.includes('documentation') || text.includes('reference')) {
+  // Use word boundary matching to avoid "doc" matching "information"
+  const docPatterns = [/\bdocs?\b/, /\bdocumentation\b/, /\bmanual\b/, /\bspec\b/, /\breference\b/, /\bapi docs\b/];
+  if (docPatterns.some(pattern => pattern.test(text))) {
     return 'context7';
   }
 
