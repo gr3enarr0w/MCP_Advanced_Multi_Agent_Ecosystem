@@ -1,0 +1,6 @@
+[submodule "src/mcp-servers/external/context7"]
+	path = src/mcp-servers/external/context7
+	url = https://github.com/upstash/context7.git
+[submodule "src/mcp-servers/external/mcp-code-checker"]
+	path = src/mcp-servers/external/mcp-code-checker
+	url = https://github.com/MarcusJellinghaus/mcp-code-checker.git

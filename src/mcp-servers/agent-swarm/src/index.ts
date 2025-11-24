@@ -21,8 +21,14 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { EventEmitter } from 'eventemitter3';
 import { homedir } from 'os';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { existsSync, mkdirSync } from 'fs';
+import { fileURLToPath } from 'url';
+
+// Resolve project root (agent-swarm is at src/mcp-servers/agent-swarm)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const PROJECT_ROOT = join(__dirname, '..', '..', '..', '..');
 
 // Import types
 import {
@@ -33,7 +39,8 @@ import {
   TaskStatus,
   MessageType,
   MessagePriority,
-  IntegrationConfig
+  IntegrationConfig,
+  IntegrationType
 } from './types/agents.js';
 
 // Configuration
@@ -55,6 +62,7 @@ if (!existsSync(LOG_DIR)) {
 import { AgentStorage } from './storage/agent-storage.js';
 import { AgentOrchestrator } from './orchestrator/agent-orchestrator.js';
 import { MCPServerBridge } from './integration/mcp-bridge.js';
+import { MCPClient, MCPCommandConfig } from './integration/mcp-client.js';
 import { AgentLifecycleManager } from './agents/base/agent-lifecycle.js';
 import { SPARCWorkflowManager } from './orchestrator/sparc-workflow.js';
 import { BoomerangTaskManager } from './orchestrator/boomerang-task.js';
@@ -75,8 +83,8 @@ class AgentSwarmServer extends EventEmitter {
     this.orchestrator = new AgentOrchestrator(this.storage);
     this.mcpBridge = new MCPServerBridge(this.storage);
     this.lifecycleManager = new AgentLifecycleManager(this.storage);
-    this.sparcManager = new SPARCWorkflowManager(this.storage, this.orchestrator);
-    this.boomerangManager = new BoomerangTaskManager(this.storage, this.orchestrator);
+    this.sparcManager = new SPARCWorkflowManager(this.storage);
+    this.boomerangManager = new BoomerangTaskManager(this.storage);
   }
 
   async initialize(): Promise<void> {
@@ -137,7 +145,7 @@ class AgentSwarmServer extends EventEmitter {
       console.log(`Boomerang sent: task ${taskId} to ${targetAgent}`);
     });
 
-    this.boomerangManager.on('boomerang:returned', (taskId: string, result: any) => {
+    this.boomerangManager.on('boomerang:returned', (taskId: string, _result: any) => {
       console.log(`Boomerang returned: task ${taskId} with result`);
     });
 
@@ -196,8 +204,8 @@ class AgentSwarmServer extends EventEmitter {
     return this.sparcManager.createWorkflow(projectDescription);
   }
 
-  async sendBoomerangTask(task: Task, targetAgent: string): Promise<void> {
-    await this.boomerangManager.sendBoomerang(task, targetAgent);
+  async sendBoomerangTask(task: Task, targetAgent: string, feedback: string = 'auto-feedback'): Promise<void> {
+    await this.boomerangManager.sendBoomerang(task, targetAgent, feedback);
   }
 
   async shutdown(): Promise<void> {
@@ -230,6 +238,82 @@ const server = new Server(
 
 const agentSwarm = new AgentSwarmServer();
 
+type RouteTarget = 'search-aggregator' | 'task-orchestrator' | 'context7' | 'mcp-code-checker';
+
+// Build paths relative to project root (external MCPs are inside src/mcp-servers/external/)
+const INTERNAL_MCP_BASE = join(PROJECT_ROOT, 'src', 'mcp-servers');
+const EXTERNAL_MCP_BASE = join(INTERNAL_MCP_BASE, 'external');
+
+function getRouteConfig(target: RouteTarget): MCPCommandConfig | null {
+  switch (target) {
+    case 'search-aggregator':
+      return {
+        command: process.env.SEARCH_MCP_CMD || 'node',
+        args: (process.env.SEARCH_MCP_ARGS?.split(' ')) ||
+              [join(INTERNAL_MCP_BASE, 'search-aggregator', 'dist', 'index.js')],
+      };
+    case 'task-orchestrator':
+      return {
+        command: process.env.TASK_MCP_CMD || 'node',
+        args: (process.env.TASK_MCP_ARGS?.split(' ')) ||
+              [join(INTERNAL_MCP_BASE, 'task-orchestrator', 'dist', 'index.js')],
+      };
+    case 'context7': {
+      const path = process.env.CONTEXT7_MCP_ARGS?.split(' ')?.[0] ||
+                   join(EXTERNAL_MCP_BASE, 'context7', 'dist', 'index.js');
+      if (!existsSync(path)) return null; // Not installed
+      return {
+        command: process.env.CONTEXT7_MCP_CMD || 'node',
+        args: [path],
+      };
+    }
+    case 'mcp-code-checker': {
+      // Python MCP server for code quality checks (pylint, pytest, mypy)
+      // Check if mcp-code-checker is available in PATH (installed via pip)
+      const projectDir = process.env.MCP_CODE_CHECKER_PROJECT_DIR || process.cwd();
+      return {
+        command: process.env.MCP_CODE_CHECKER_CMD || 'mcp-code-checker',
+        args: ['--project-dir', projectDir],
+      };
+    }
+    default:
+      return null;
+  }
+}
+
+// Check which external MCPs are available
+const EXTERNAL_MCP_STATUS = {
+  'context7': existsSync(join(EXTERNAL_MCP_BASE, 'context7', 'dist', 'index.js')),
+  'mcp-code-checker': true, // Installed via pip, check happens at runtime
+};
+
+// Log availability on startup
+console.error('External MCP availability:', JSON.stringify(EXTERNAL_MCP_STATUS));
+
+function pickRoute(goal: string, category?: string): RouteTarget {
+  const text = `${goal} ${category || ''}`.toLowerCase();
+
+  // Documentation lookup via context7
+  if (text.includes('doc') || text.includes('manual') || text.includes('spec') || text.includes('documentation') || text.includes('reference')) {
+    return 'context7';
+  }
+
+  // Code quality checks via mcp-code-checker
+  if (text.includes('lint') || text.includes('pylint') || text.includes('pytest') ||
+      text.includes('mypy') || text.includes('type check') || text.includes('code quality') ||
+      text.includes('run tests') || text.includes('check code') || text.includes('analyze code')) {
+    return 'mcp-code-checker';
+  }
+
+  // Web search via search-aggregator
+  if (text.includes('search') || text.includes('web') || text.includes('lookup') || text.includes('find')) {
+    return 'search-aggregator';
+  }
+
+  // Default to task orchestrator for non-search work
+  return 'task-orchestrator';
+}
+
 // Define MCP tools
 const tools: Tool[] = [
   {
@@ -249,6 +333,31 @@ const tools: Tool[] = [
           description: 'Filter agents by type',
         },
       },
+    },
+  },
+  {
+    name: 'route_plan',
+    description: 'Plan which MCP server will be used for a given goal',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        goal: { type: 'string', description: 'User goal or task' },
+        category: { type: 'string', description: 'Optional hint: search, code, task, git, etc.' },
+      },
+      required: ['goal'],
+    },
+  },
+  {
+    name: 'delegate',
+    description: 'Delegate a goal to the appropriate MCP server (search or task) and return the result',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        goal: { type: 'string', description: 'User goal or query' },
+        category: { type: 'string', description: 'Optional hint for routing: search, task, code, git' },
+        limit: { type: 'number', description: 'Max search results (for search routes)', default: 5 },
+      },
+      required: ['goal'],
     },
   },
   {
@@ -496,7 +605,8 @@ server.setRequestHandler(ListToolsRequestSchema, async () => ({
 }));
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
-  const { name, arguments: args } = request.params;
+  const { name } = request.params;
+  const args = request.params.arguments as Record<string, any> | undefined;
 
   try {
     // Ensure agent swarm is initialized
@@ -574,16 +684,30 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'delegate_task': {
+        const requestedAgentType = args?.agentType as AgentType | undefined;
+        if (!requestedAgentType) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({ error: 'agentType is required' }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
         const task: Task = {
-          id: args?.taskId,
-          type: args?.agentType,
-          description: args?.description,
+          id: args?.taskId || `task_${Date.now()}`,
+          type: requestedAgentType,
+          description: args?.description || 'Autogenerated task',
           status: 'pending',
           priority: args?.priority || 1,
           dependencies: args?.dependencies || [],
+          createdAt: new Date(),
         };
 
-        const delegatedTask = await agentSwarm.delegateTask(task, args?.agentType);
+        const delegatedTask = await agentSwarm.delegateTask(task, requestedAgentType);
 
         return {
           content: [
@@ -601,6 +725,135 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             },
           ],
         };
+      }
+
+      case 'route_plan': {
+        const route = pickRoute(args?.goal as string, args?.category as string | undefined);
+        const config = getRouteConfig(route);
+        const toolMap: Record<RouteTarget, string> = {
+          'search-aggregator': 'search',
+          'task-orchestrator': 'create_task',
+          'context7': 'resolve-library-id',
+          'mcp-code-checker': 'run_all_checks',
+        };
+        const tool = toolMap[route];
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                goal: args?.goal,
+                category: args?.category,
+                route,
+                tool,
+                available: !!config,
+                serverPath: config ? 'configured' : 'not found',
+                externalMcpStatus: EXTERNAL_MCP_STATUS,
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'delegate': {
+        const route = pickRoute(args?.goal as string, args?.category as string | undefined);
+        const targetConfig = getRouteConfig(route);
+
+        // Require proper configuration - no fallbacks
+        if (!targetConfig) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  error: `MCP server '${route}' is not configured or not found`,
+                  route,
+                  suggestion: route === 'context7'
+                    ? 'Run: ./scripts/setup-external-mcps.sh to install external MCP servers'
+                    : 'Check server installation and rebuild agent-swarm',
+                  externalMcpStatus: EXTERNAL_MCP_STATUS,
+                }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        const client = new MCPClient(targetConfig);
+
+        try {
+          if (route === 'search-aggregator') {
+            const result = await client.callTool('search', {
+              query: args?.goal,
+              limit: args?.limit || 5,
+              use_cache: true,
+            });
+            return { content: result.content };
+          }
+
+
+          if (route === 'context7') {
+            // context7 tools: resolve-library-id, get-library-docs
+            // First resolve the library, then get docs
+            const resolveResult = await client.callTool('resolve-library-id', {
+              libraryName: args?.goal,
+            });
+            return { content: resolveResult.content };
+          }
+
+          if (route === 'mcp-code-checker') {
+            // mcp-code-checker tools: run_pylint_check, run_pytest_check, run_mypy_check, run_all_checks
+            // Determine which check to run based on the goal
+            const goalLower = (args?.goal as string).toLowerCase();
+            let toolName = 'run_all_checks'; // Default to comprehensive check
+            const toolArgs: Record<string, any> = {};
+
+            if (goalLower.includes('pylint') || goalLower.includes('lint')) {
+              toolName = 'run_pylint_check';
+              toolArgs.categories = ['error', 'fatal', 'warning'];
+            } else if (goalLower.includes('pytest') || goalLower.includes('test')) {
+              toolName = 'run_pytest_check';
+              toolArgs.verbosity = 2;
+            } else if (goalLower.includes('mypy') || goalLower.includes('type')) {
+              toolName = 'run_mypy_check';
+              toolArgs.strict = true;
+            }
+
+            const result = await client.callTool(toolName, toolArgs);
+            return { content: result.content };
+          }
+
+          // task-orchestrator fallback
+          const result = await client.callTool('create_task', {
+            title: args?.goal,
+            description: args?.goal,
+            priority: 1,
+            dependencies: [],
+            tags: ['swarm', 'delegated'],
+          });
+          return { content: result.content };
+
+        } catch (err) {
+          // Handle MCP call failures gracefully
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  status: 'error',
+                  route,
+                  error: errorMsg,
+                  suggestion: route === 'context7'
+                    ? 'External MCP may not be running. Check installation with: ./scripts/setup-external-mcps.sh'
+                    : 'Internal MCP server error. Check server logs.',
+                }, null, 2),
+              },
+            ],
+            isError: true,
+          };
+        }
       }
 
       case 'get_task_status': {
@@ -722,7 +975,20 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           };
         }
 
-        await agentSwarm.sendBoomerangTask(task, args?.targetAgent);
+        const targetAgent = args?.targetAgent;
+        if (!targetAgent) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({ error: 'targetAgent is required' }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        await agentSwarm.sendBoomerangTask(task, targetAgent, args?.feedback || 'auto-feedback');
 
         return {
           content: [
@@ -739,10 +1005,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
 
       case 'integrate_with_mcp_server': {
+        const serverType = args?.serverType as IntegrationType | undefined;
+        if (!serverType) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({ error: 'serverType is required' }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
         const config: IntegrationConfig = {
-          type: args?.serverType,
+          type: serverType,
           enabled: true,
-          autoDelegate: args?.autoDelegate || true,
+          autoDelegate: args?.autoDelegate ?? true,
           delegationRules: {},
           timeout: 30000,
           retryAttempts: 3,
