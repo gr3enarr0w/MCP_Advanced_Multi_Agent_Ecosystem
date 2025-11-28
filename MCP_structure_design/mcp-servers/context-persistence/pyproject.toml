@@ -1,0 +1,26 @@
+[project]
+name = "context-persistence-mcp"
+version = "0.1.0"
+description = "Local-first MCP server for conversation history with semantic search"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=1.0.0",
+    "qdrant-client>=1.7.0",
+    "sqlalchemy>=2.0.0",
+    "sentence-transformers>=2.2.0",
+    "tiktoken>=0.5.0",
+    "aiosqlite>=0.19.0"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0"
+]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project.scripts]
+context-persistence = "context_persistence.server:main"

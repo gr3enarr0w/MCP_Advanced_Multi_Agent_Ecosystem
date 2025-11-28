@@ -13,7 +13,7 @@
  */
 
 import { EventEmitter } from 'eventemitter3';
-import { Task, AgentType, AgentMessage } from '../types/agents.js';
+import { Task, AgentType, AgentMessage, MessagePriority } from '../types/agents.js';
 import { AgentStorage } from '../storage/agent-storage.js';
 
 export interface BoomerangTask {
@@ -253,6 +253,7 @@ export class BoomerangTaskManager extends EventEmitter {
 
   private async sendBoomerangToAgent(boomerangTask: BoomerangTask): Promise<void> {
     boomerangTask.status = 'sent';
+    const priority = this.normalizePriority(boomerangTask.priority);
     
     // Create a message to send to the target agent
     const message: AgentMessage = {
@@ -260,7 +261,7 @@ export class BoomerangTaskManager extends EventEmitter {
       from: 'boomerang_manager',
       to: boomerangTask.targetAgent,
       type: 'task_delegation',
-      priority: boomerangTask.priority,
+      priority,
       timestamp: new Date(),
       content: {
         boomerangTaskId: boomerangTask.id,
@@ -268,13 +269,13 @@ export class BoomerangTaskManager extends EventEmitter {
         feedback: boomerangTask.feedback,
         refinementType: boomerangTask.refinementType,
         originalAgent: boomerangTask.sourceAgent,
-        priority: boomerangTask.priority,
+        priority,
         expectedReturnTime: boomerangTask.expectedReturnTime,
       },
       context: {
         taskId: boomerangTask.originalTaskId,
         agentType: 'boomerang' as AgentType,
-        priority: boomerangTask.priority,
+        priority,
         timestamp: Date.now(),
       },
       requiresResponse: true,
@@ -286,7 +287,7 @@ export class BoomerangTaskManager extends EventEmitter {
     await this.storage.logMessage(message);
   }
 
-  async handleBoomerangReturn(boomerangTaskId: string, refinedResult: any, qualityScore: number, agentId: string): Promise<void> {
+  async handleBoomerangReturn(boomerangTaskId: string, refinedResult: any, qualityScore: number): Promise<void> {
     const boomerangTask = this.activeBoomerangs.get(boomerangTaskId);
     if (!boomerangTask) {
       throw new Error(`Boomerang task ${boomerangTaskId} not found`);
@@ -308,7 +309,7 @@ export class BoomerangTaskManager extends EventEmitter {
     }
 
     // Validate the refinement
-    const validationResults = await this.validateRefinement(boomerangTask, refinedResult, qualityScore);
+    const validationResults = await this.validateRefinement(boomerangTask, qualityScore);
     boomerangTask.boomerangMetadata.validationResults = validationResults;
 
     // Check if further refinement is needed
@@ -340,7 +341,7 @@ export class BoomerangTaskManager extends EventEmitter {
     console.log(`Boomerang returned: ${boomerangTaskId} (quality: ${qualityScore}, status: ${boomerangTask.status})`);
   }
 
-  private async validateRefinement(boomerangTask: BoomerangTask, refinedResult: any, qualityScore: number): Promise<ValidationResult[]> {
+  private async validateRefinement(boomerangTask: BoomerangTask, qualityScore: number): Promise<ValidationResult[]> {
     const results: ValidationResult[] = [];
     
     // Validate based on refinement type
@@ -414,7 +415,7 @@ export class BoomerangTaskManager extends EventEmitter {
     if (content.boomerangTaskId) {
       // This is a boomerang task response
       const { boomerangTaskId, result, qualityScore } = content;
-      await this.handleBoomerangReturn(boomerangTaskId, result, qualityScore, message.from);
+      await this.handleBoomerangReturn(boomerangTaskId, result, qualityScore);
     }
   }
 
@@ -527,14 +528,66 @@ export class BoomerangTaskManager extends EventEmitter {
     return priorityMap[priority];
   }
 
+  private normalizePriority(value: number): MessagePriority {
+    const normalized = Math.min(4, Math.max(0, Math.round(value)));
+    return normalized as MessagePriority;
+  }
+
   private async loadBoomerangHistory(): Promise<void> {
-    // Load boomerang history from storage
-    // For now, we'll keep it in memory
+    try {
+      const storedTasks = await this.storage.getAllBoomerangTasks();
+      for (const stored of storedTasks) {
+        const boomerangTask: BoomerangTask = {
+          id: stored.id,
+          originalTaskId: stored.originalTaskId,
+          boomerangId: `boomerang_${stored.id}`,
+          targetAgent: stored.targetAgent,
+          sourceAgent: 'agent-swarm',
+          refinementType: 'quality_improvement',
+          feedback: stored.feedback || '',
+          priority: stored.priority || 2,
+          status: stored.status as BoomerangTask['status'],
+          sentAt: stored.sentAt,
+          returnedAt: stored.returnedAt,
+          expectedReturnTime: 300000, // 5 minutes default
+          refinementCount: 1,
+          maxRefinements: 5,
+          boomerangMetadata: {
+            originalQuality: 0,
+            targetQuality: 0.8,
+            improvementMetrics: {},
+            validationResults: [],
+          },
+        };
+
+        if (stored.status === 'completed' || stored.status === 'failed') {
+          this.boomerangHistory.push(boomerangTask);
+        } else {
+          this.activeBoomerangs.set(boomerangTask.id, boomerangTask);
+        }
+      }
+      console.error(`Loaded ${storedTasks.length} boomerang tasks from storage`);
+    } catch (error) {
+      console.error('Failed to load boomerang history:', error);
+    }
   }
 
   private async storeBoomerangTask(boomerangTask: BoomerangTask): Promise<void> {
-    // Store boomerang task in storage
-    // For now, we'll keep it in memory
+    try {
+      await this.storage.saveBoomerangTask({
+        id: boomerangTask.id,
+        originalTaskId: boomerangTask.originalTaskId,
+        targetAgent: boomerangTask.targetAgent,
+        feedback: boomerangTask.feedback,
+        priority: boomerangTask.priority,
+        status: boomerangTask.status,
+        sentAt: boomerangTask.sentAt,
+        returnedAt: boomerangTask.returnedAt,
+        result: boomerangTask.boomerangMetadata,
+      });
+    } catch (error) {
+      console.error(`Failed to store boomerang task ${boomerangTask.id}:`, error);
+    }
   }
 
   async getRefinementStatistics(): Promise<any> {

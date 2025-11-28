@@ -1,20 +1,29 @@
 /**
  * MCP Server Bridge
- * 
- * Communication bridge for integrating with existing MCP servers
- * Handles inter-server communication, tool delegation, and data exchange
- * 
+ *
+ * Communication bridge for integrating with existing MCP servers.
+ * Uses real MCP client connections (not simulated).
+ *
  * Integrated Servers:
  * - Task Orchestrator: Code execution and task management
  * - Context Persistence: Vector storage and knowledge management
  * - Search Aggregator: Multi-provider search capabilities
  * - Skills Manager: Dynamic skill tracking and management
- * - GitHub OAuth2: Repository integration and authentication
  */
 
 import { EventEmitter } from 'eventemitter3';
+import { join, dirname } from 'path';
+import { existsSync } from 'fs';
+import { fileURLToPath } from 'url';
 import { AgentMessage, IntegrationConfig, IntegrationType } from '../types/agents.js';
 import { AgentStorage } from '../storage/agent-storage.js';
+import { MCPClient, MCPCommandConfig } from './mcp-client.js';
+
+// Resolve paths
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+const PROJECT_ROOT = join(__dirname, '..', '..', '..', '..', '..');
+const MCP_SERVERS_DIR = join(PROJECT_ROOT, 'src', 'mcp-servers');
 
 export interface MCPServerConnection {
   name: string;
@@ -24,7 +33,7 @@ export interface MCPServerConnection {
   responseTime: number;
   capabilities: string[];
   config: IntegrationConfig;
-  endpoint?: string;
+  commandConfig: MCPCommandConfig;
   health: ServerHealth;
 }
 
@@ -66,12 +75,61 @@ export interface DataQueryRequest {
   offset: number;
 }
 
+// Server command configurations (matching Roo settings)
+function getServerCommandConfig(serverType: IntegrationType): MCPCommandConfig | null {
+  const homedir = process.env.HOME || '/tmp';
+
+  switch (serverType) {
+    case 'task_orchestrator':
+      return {
+        command: 'node',
+        args: [join(MCP_SERVERS_DIR, 'task-orchestrator', 'dist', 'index.js')],
+        env: {
+          TASKS_DB: join(homedir, '.mcp', 'tasks', 'tasks.db'),
+        },
+      };
+    case 'context_persistence':
+      // Python server - check for venv
+      const venvPython = join(MCP_SERVERS_DIR, 'context-persistence', 'venv3.12', 'bin', 'python3');
+      const pythonCmd = existsSync(venvPython) ? venvPython : 'python3';
+      return {
+        command: pythonCmd,
+        args: ['-m', 'context_persistence.server'],
+        env: {
+          PYTHONPATH: join(MCP_SERVERS_DIR, 'context-persistence', 'src'),
+          CONTEXT_DB: join(homedir, '.mcp', 'context', 'db', 'conversation.db'),
+          QDRANT_PATH: join(homedir, '.mcp', 'context', 'qdrant'),
+        },
+      };
+    case 'search_aggregator':
+      return {
+        command: 'node',
+        args: [join(MCP_SERVERS_DIR, 'search-aggregator', 'dist', 'index.js')],
+        env: {
+          // API keys should be in environment or .env file
+          PERPLEXITY_API_KEY: process.env.PERPLEXITY_API_KEY || '',
+          OPENROUTER_API_KEY: process.env.OPENROUTER_API_KEY || '',
+          BRAVE_API_KEY: process.env.BRAVE_API_KEY || '',
+        },
+      };
+    case 'skills_manager':
+      return {
+        command: 'node',
+        args: [join(MCP_SERVERS_DIR, 'skills-manager', 'dist', 'index.js')],
+        env: {
+          SKILLS_DB_PATH: join(homedir, '.mcp', 'skills', 'skills.db'),
+        },
+      };
+    default:
+      return null;
+  }
+}
+
 export class MCPServerBridge extends EventEmitter {
   private storage: AgentStorage;
-  private connections: Map<string, MCPServerConnection> = new Map();
-  private messageQueue: CrossServerMessage[] = [];
-  private activeRequests: Map<string, { resolve: Function; reject: Function; timeout: NodeJS.Timeout }> = new Map();
+  private connections: Map<IntegrationType, MCPServerConnection> = new Map();
   private serverConfigs: Map<IntegrationType, IntegrationConfig> = new Map();
+  private healthCheckInterval: NodeJS.Timeout | null = null;
 
   constructor(storage: AgentStorage) {
     super();
@@ -139,16 +197,13 @@ export class MCPServerBridge extends EventEmitter {
 
   async initialize(): Promise<void> {
     try {
-      // Discover and connect to existing MCP servers
+      // Discover and test connections to MCP servers
       await this.discoverServers();
-      
-      // Start health monitoring
+
+      // Start health monitoring (every 60 seconds)
       this.startHealthMonitoring();
-      
-      // Start message processing
-      this.startMessageProcessing();
-      
-      console.log('MCP Server Bridge initialized');
+
+      console.error('MCP Server Bridge initialized with real connections');
     } catch (error) {
       console.error('Failed to initialize MCP Server Bridge:', error);
       throw error;
@@ -157,25 +212,36 @@ export class MCPServerBridge extends EventEmitter {
 
   private async discoverServers(): Promise<void> {
     const serverTypes: IntegrationType[] = ['task_orchestrator', 'context_persistence', 'search_aggregator', 'skills_manager'];
-    
+
     for (const serverType of serverTypes) {
       try {
-        const connection = await this.connectToServer(serverType);
+        const connection = await this.createServerConnection(serverType);
         if (connection) {
-          this.connections.set(connection.name, connection);
-          this.emit('server:connected', connection.name);
+          this.connections.set(serverType, connection);
+          this.emit('server:connected', serverType);
+          console.error(`Connected to ${serverType}`);
         }
       } catch (error) {
-        console.warn(`Failed to connect to ${serverType}:`, error);
+        console.error(`Failed to connect to ${serverType}:`, error);
         this.emit('server:connection_failed', serverType, error);
       }
     }
   }
 
-  private async connectToServer(serverType: IntegrationType): Promise<MCPServerConnection | null> {
+  private async createServerConnection(serverType: IntegrationType): Promise<MCPServerConnection | null> {
     const config = this.serverConfigs.get(serverType);
-    if (!config) {
-      throw new Error(`No configuration found for server type: ${serverType}`);
+    const commandConfig = getServerCommandConfig(serverType);
+
+    if (!config || !commandConfig) {
+      console.error(`No configuration found for server type: ${serverType}`);
+      return null;
+    }
+
+    // Check if the server binary/script exists
+    const serverPath = commandConfig.args[0];
+    if (serverPath && !serverPath.startsWith('-') && !existsSync(serverPath)) {
+      console.error(`Server not found at ${serverPath}`);
+      return null;
     }
 
     const connection: MCPServerConnection = {
@@ -184,8 +250,9 @@ export class MCPServerBridge extends EventEmitter {
       status: 'connecting',
       lastPing: new Date(),
       responseTime: 0,
-      capabilities: await this.discoverServerCapabilities(serverType),
+      capabilities: this.getServerCapabilities(serverType),
       config,
+      commandConfig,
       health: {
         status: 'unhealthy',
         responseTime: 0,
@@ -195,9 +262,9 @@ export class MCPServerBridge extends EventEmitter {
       },
     };
 
+    // Test the connection with a real ping
     try {
-      // Test connection
-      const healthCheck = await this.pingServer(serverType);
+      const healthCheck = await this.pingServer(serverType, commandConfig);
       if (healthCheck.success) {
         connection.status = 'connected';
         connection.responseTime = healthCheck.responseTime;
@@ -220,49 +287,41 @@ export class MCPServerBridge extends EventEmitter {
     return connection;
   }
 
-  private async discoverServerCapabilities(serverType: IntegrationType): Promise<string[]> {
+  private getServerCapabilities(serverType: IntegrationType): string[] {
     const capabilities: Record<IntegrationType, string[]> = {
       'task_orchestrator': [
-        'code_execution',
-        'task_management',
-        'language_support',
-        'environment_management',
-        'result_capture',
+        'create_task', 'update_task_status', 'get_task', 'list_tasks',
+        'execute_code', 'execute_python_code', 'execute_javascript_code',
+        'analyze_code_quality', 'get_task_graph',
       ],
       'context_persistence': [
-        'vector_storage',
-        'semantic_search',
-        'conversation_history',
-        'knowledge_retrieval',
-        'similarity_matching',
+        'save_conversation', 'load_conversation_history',
+        'search_similar_conversations', 'save_decision', 'get_conversation_stats',
       ],
       'search_aggregator': [
-        'multi_provider_search',
-        'web_search',
-        'search_caching',
-        'result_aggregation',
-        'fallback_support',
+        'search', 'get_available_providers', 'clear_cache',
       ],
       'skills_manager': [
-        'skill_tracking',
-        'learning_management',
-        'capability_assessment',
-        'skill_recommendation',
-        'performance_analytics',
+        'add_skill', 'get_skill', 'list_skills', 'update_skill_level', 'get_skill_stats',
       ],
     };
 
     return capabilities[serverType] || [];
   }
 
-  private async pingServer(serverType: IntegrationType): Promise<{ success: boolean; responseTime: number; error?: string }> {
+  private async pingServer(
+    serverType: IntegrationType,
+    commandConfig: MCPCommandConfig
+  ): Promise<{ success: boolean; responseTime: number; error?: string }> {
     const startTime = Date.now();
-    
+
     try {
-      // Simulate ping to MCP server
-      // In real implementation, this would make actual HTTP/stdio calls
-      await new Promise(resolve => setTimeout(resolve, Math.random() * 100 + 50));
-      
+      const client = new MCPClient(commandConfig);
+
+      // Use a lightweight tool to test connectivity
+      const testTool = this.getTestTool(serverType);
+      await client.callTool(testTool.name, testTool.args);
+
       const responseTime = Date.now() - startTime;
       return { success: true, responseTime };
     } catch (error) {
@@ -274,15 +333,60 @@ export class MCPServerBridge extends EventEmitter {
     }
   }
 
+  private getTestTool(serverType: IntegrationType): { name: string; args: Record<string, any> } {
+    switch (serverType) {
+      case 'task_orchestrator':
+        return { name: 'list_tasks', args: { limit: 1 } };
+      case 'context_persistence':
+        return { name: 'get_conversation_stats', args: {} };
+      case 'search_aggregator':
+        return { name: 'get_available_providers', args: {} };
+      case 'skills_manager':
+        return { name: 'get_skill_stats', args: {} };
+      default:
+        return { name: 'list_tasks', args: { limit: 1 } };
+    }
+  }
+
+  /**
+   * Call a tool on a downstream MCP server
+   */
+  async callServerTool(
+    serverType: IntegrationType,
+    toolName: string,
+    args: Record<string, any>
+  ): Promise<any> {
+    const connection = this.connections.get(serverType);
+    if (!connection || connection.status !== 'connected') {
+      throw new Error(`Server ${serverType} is not available`);
+    }
+
+    const startTime = Date.now();
+
+    try {
+      const client = new MCPClient(connection.commandConfig);
+      const result = await client.callTool(toolName, args);
+
+      // Update health metrics
+      const responseTime = Date.now() - startTime;
+      this.updateServerHealth(serverType, true, responseTime);
+
+      return result;
+    } catch (error) {
+      this.updateServerHealth(serverType, false, 0, error);
+      throw error;
+    }
+  }
+
   async delegateTaskToServer(serverType: IntegrationType, request: TaskDelegationRequest): Promise<any> {
     const connection = this.connections.get(serverType);
     if (!connection || connection.status !== 'connected') {
       throw new Error(`Server ${serverType} is not available`);
     }
 
+    // Log the delegation
     const messageId = `task_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    const message: CrossServerMessage = {
+    await this.logMessage({
       id: messageId,
       from: 'agent-swarm',
       to: serverType,
@@ -292,21 +396,44 @@ export class MCPServerBridge extends EventEmitter {
       requiresResponse: true,
       correlationId: request.taskId,
       priority: request.priority,
-    };
+    });
 
-    try {
-      // Send message and wait for response
-      const response = await this.sendMessageWithTimeout(message, connection.config.timeout);
-      
-      // Update server health
-      this.updateServerHealth(serverType, true, response.responseTime);
-      
-      return response.payload;
-    } catch (error) {
-      // Update server health
-      this.updateServerHealth(serverType, false, 0, error);
-      throw error;
+    // Route to appropriate tool based on task type
+    let toolName: string;
+    let toolArgs: Record<string, any>;
+
+    switch (request.taskType) {
+      case 'code_execution':
+        toolName = 'execute_code';
+        toolArgs = {
+          code: request.parameters.code,
+          language: request.parameters.language || 'javascript',
+          timeout: request.timeout,
+        };
+        break;
+      case 'task_creation':
+        toolName = 'create_task';
+        toolArgs = {
+          title: request.parameters.title,
+          description: request.parameters.description,
+          priority: request.priority,
+          tags: request.parameters.tags || [],
+        };
+        break;
+      case 'search':
+        toolName = 'search';
+        toolArgs = {
+          query: request.parameters.query,
+          limit: request.parameters.limit || 5,
+          use_cache: true,
+        };
+        break;
+      default:
+        toolName = 'create_task';
+        toolArgs = request.parameters;
     }
+
+    return this.callServerTool(serverType, toolName, toolArgs);
   }
 
   async queryServerData(serverType: IntegrationType, request: DataQueryRequest): Promise<any> {
@@ -315,27 +442,25 @@ export class MCPServerBridge extends EventEmitter {
       throw new Error(`Server ${serverType} is not available`);
     }
 
-    const messageId = `query_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    const message: CrossServerMessage = {
-      id: messageId,
-      from: 'agent-swarm',
-      to: serverType,
-      type: 'data_request',
-      payload: request,
-      timestamp: new Date(),
-      requiresResponse: true,
-      priority: 1,
-    };
+    // Route to appropriate query tool
+    let toolName: string;
+    let toolArgs: Record<string, any>;
 
-    try {
-      const response = await this.sendMessageWithTimeout(message, connection.config.timeout);
-      this.updateServerHealth(serverType, true, response.responseTime);
-      return response.payload;
-    } catch (error) {
-      this.updateServerHealth(serverType, false, 0, error);
-      throw error;
+    switch (request.resultType) {
+      case 'tasks':
+        toolName = 'list_tasks';
+        toolArgs = { limit: request.limit, ...request.filters };
+        break;
+      case 'knowledge':
+        toolName = 'search_similar_conversations';
+        toolArgs = { query: request.query, limit: request.limit };
+        break;
+      default:
+        toolName = 'list_tasks';
+        toolArgs = { limit: request.limit };
     }
+
+    return this.callServerTool(serverType, toolName, toolArgs);
   }
 
   async shareKnowledgeWithServer(serverType: IntegrationType, knowledge: any): Promise<void> {
@@ -344,185 +469,95 @@ export class MCPServerBridge extends EventEmitter {
       throw new Error(`Server ${serverType} is not available`);
     }
 
-    const messageId = `knowledge_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    const message: CrossServerMessage = {
-      id: messageId,
-      from: 'agent-swarm',
-      to: serverType,
-      type: 'knowledge_share',
-      payload: knowledge,
-      timestamp: new Date(),
-      requiresResponse: false,
-      priority: 1,
-    };
-
-    await this.sendMessage(message);
-  }
-
-  async syncWithServer(serverType: IntegrationType, syncData: any): Promise<any> {
-    const connection = this.connections.get(serverType);
-    if (!connection || connection.status !== 'connected') {
-      throw new Error(`Server ${serverType} is not available`);
-    }
-
-    const messageId = `sync_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
-    const message: CrossServerMessage = {
-      id: messageId,
-      from: 'agent-swarm',
-      to: serverType,
-      type: 'sync_request',
-      payload: syncData,
-      timestamp: new Date(),
-      requiresResponse: true,
-      priority: 2,
-    };
-
-    try {
-      const response = await this.sendMessageWithTimeout(message, connection.config.timeout);
-      this.updateServerHealth(serverType, true, response.responseTime);
-      return response.payload;
-    } catch (error) {
-      this.updateServerHealth(serverType, false, 0, error);
-      throw error;
+    if (serverType === 'context_persistence') {
+      await this.callServerTool('context_persistence', 'save_conversation', {
+        conversation_id: knowledge.conversationId || `knowledge_${Date.now()}`,
+        messages: [{ role: 'system', content: JSON.stringify(knowledge.content) }],
+        metadata: knowledge.metadata,
+      });
     }
   }
 
   async handleKnowledgeShare(message: AgentMessage): Promise<void> {
-    // Forward knowledge to relevant MCP servers
     const knowledgeData = message.content;
-    
+
     // Share with context persistence for long-term storage
     if (this.connections.has('context_persistence')) {
-      await this.shareKnowledgeWithServer('context_persistence', {
-        type: 'agent_knowledge',
-        content: knowledgeData,
-        metadata: {
-          agentId: message.from,
-          timestamp: message.timestamp,
-          source: 'agent-swarm',
-        },
-      });
-    }
-
-    // Share with skills manager for capability updates
-    if (this.connections.has('skills_manager')) {
-      await this.shareKnowledgeWithServer('skills_manager', {
-        type: 'learning_update',
-        content: knowledgeData,
-        metadata: {
-          agentId: message.from,
-          timestamp: message.timestamp,
-        },
-      });
-    }
-  }
-
-  private async sendMessageWithTimeout(message: CrossServerMessage, timeout: number): Promise<CrossServerMessage> {
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.activeRequests.delete(message.id);
-        reject(new Error(`Request timeout after ${timeout}ms`));
-      }, timeout);
-
-      this.activeRequests.set(message.id, {
-        resolve,
-        reject,
-        timeout: timer,
-      });
-
-      this.sendMessage(message);
-    });
-  }
-
-  private async sendMessage(message: CrossServerMessage): Promise<void> {
-    // Add to queue for processing
-    this.messageQueue.push(message);
-    
-    // Log the message
-    await this.storage.logMessage({
-      id: `cross_server_${message.id}`,
-      from: message.from,
-      to: message.to,
-      type: 'knowledge_share', // Map to existing message type
-      priority: message.priority,
-      timestamp: message.timestamp,
-      content: message.payload,
-      context: {
-        taskId: message.correlationId,
-        agentType: 'integration' as any,
-        priority: message.priority,
-        timestamp: Date.now(),
-      },
-      requiresResponse: message.requiresResponse,
-      retryCount: 0,
-      maxRetries: 3,
-    } as AgentMessage);
-  }
-
-  private startMessageProcessing(): void {
-    setInterval(async () => {
-      if (this.messageQueue.length > 0) {
-        const message = this.messageQueue.shift()!;
-        await this.processMessage(message);
+      try {
+        await this.shareKnowledgeWithServer('context_persistence', {
+          conversationId: `agent_knowledge_${message.from}_${Date.now()}`,
+          content: knowledgeData,
+          metadata: {
+            agentId: message.from,
+            timestamp: message.timestamp,
+            source: 'agent-swarm',
+          },
+        });
+      } catch (error) {
+        console.error('Failed to share knowledge with context_persistence:', error);
       }
-    }, 100); // Process messages every 100ms
+    }
+
+    // Update skills if relevant
+    if (this.connections.has('skills_manager') && knowledgeData.skillUpdate) {
+      try {
+        await this.callServerTool('skills_manager', 'update_skill_level', {
+          skill_id: knowledgeData.skillUpdate.skillId,
+          new_level: knowledgeData.skillUpdate.level,
+        });
+      } catch (error) {
+        console.error('Failed to update skill:', error);
+      }
+    }
   }
 
-  private async processMessage(message: CrossServerMessage): Promise<void> {
+  private async logMessage(message: CrossServerMessage): Promise<void> {
     try {
-      // Simulate message processing
-      // In real implementation, this would send actual MCP requests
-      const processingTime = Math.random() * 50 + 10;
-      await new Promise(resolve => setTimeout(resolve, processingTime));
-
-      if (message.requiresResponse && this.activeRequests.has(message.id)) {
-        const request = this.activeRequests.get(message.id)!;
-        
-        // Simulate response
-        const response: CrossServerMessage = {
-          ...message,
-          type: message.type === 'task_delegation' ? 'data_response' : 'sync_response',
-          payload: { status: 'success', result: 'Processed successfully' },
-          timestamp: new Date(),
-        };
-
-        clearTimeout(request.timeout);
-        request.resolve(response);
-        this.activeRequests.delete(message.id);
-      }
+      await this.storage.logMessage({
+        id: `cross_server_${message.id}`,
+        from: message.from,
+        to: message.to,
+        type: 'knowledge_share',
+        priority: message.priority,
+        timestamp: message.timestamp,
+        content: message.payload,
+        context: {
+          taskId: message.correlationId,
+          agentType: 'integration' as any,
+          priority: message.priority,
+          timestamp: Date.now(),
+        },
+        requiresResponse: message.requiresResponse,
+        retryCount: 0,
+        maxRetries: 3,
+      } as AgentMessage);
     } catch (error) {
-      if (message.requiresResponse && this.activeRequests.has(message.id)) {
-        const request = this.activeRequests.get(message.id)!;
-        clearTimeout(request.timeout);
-        request.reject(error);
-        this.activeRequests.delete(message.id);
-      }
+      console.error('Failed to log cross-server message:', error);
     }
   }
 
   private startHealthMonitoring(): void {
-    setInterval(async () => {
-      for (const [serverName, connection] of this.connections) {
+    // Check health every 60 seconds
+    this.healthCheckInterval = setInterval(async () => {
+      for (const [serverType, connection] of this.connections) {
         try {
-          const healthCheck = await this.pingServer(connection.type);
+          const healthCheck = await this.pingServer(serverType, connection.commandConfig);
           connection.lastPing = new Date();
           connection.responseTime = healthCheck.responseTime;
-          
+
           if (healthCheck.success) {
             connection.status = 'connected';
-            this.updateServerHealth(connection.type, true, healthCheck.responseTime);
+            this.updateServerHealth(serverType, true, healthCheck.responseTime);
           } else {
             connection.status = 'error';
-            this.updateServerHealth(connection.type, false, 0, new Error(healthCheck.error));
+            this.updateServerHealth(serverType, false, 0, new Error(healthCheck.error));
           }
         } catch (error) {
           connection.status = 'error';
-          this.updateServerHealth(connection.type, false, 0, error);
+          this.updateServerHealth(serverType, false, 0, error);
         }
       }
-    }, 30000); // Health check every 30 seconds
+    }, 60000);
   }
 
   private updateServerHealth(serverType: IntegrationType, success: boolean, responseTime: number, error?: any): void {
@@ -534,18 +569,20 @@ export class MCPServerBridge extends EventEmitter {
 
     if (success) {
       connection.health.status = 'healthy';
-      connection.health.errorRate = Math.max(0, connection.health.errorRate - 0.01);
-      if (connection.health.issues.length > 0) {
-        connection.health.issues = connection.health.issues.filter(issue => !issue.includes('connection'));
-      }
+      connection.health.errorRate = Math.max(0, connection.health.errorRate - 0.1);
+      connection.health.issues = connection.health.issues.filter(issue => !issue.includes('connection'));
     } else {
-      connection.health.errorRate = Math.min(1, connection.health.errorRate + 0.1);
+      connection.health.errorRate = Math.min(1, connection.health.errorRate + 0.2);
       connection.health.status = connection.health.errorRate > 0.5 ? 'unhealthy' : 'degraded';
-      
+
       if (error) {
         const errorMessage = error instanceof Error ? error.message : String(error);
         if (!connection.health.issues.includes(errorMessage)) {
           connection.health.issues.push(errorMessage);
+          // Keep only last 5 issues
+          if (connection.health.issues.length > 5) {
+            connection.health.issues = connection.health.issues.slice(-5);
+          }
         }
       }
     }
@@ -566,8 +603,8 @@ export class MCPServerBridge extends EventEmitter {
 
   async reconnectServer(serverType: IntegrationType): Promise<boolean> {
     try {
-      const connection = await this.connectToServer(serverType);
-      if (connection) {
+      const connection = await this.createServerConnection(serverType);
+      if (connection && connection.status === 'connected') {
         this.connections.set(serverType, connection);
         this.emit('server:reconnected', serverType);
         return true;
@@ -588,28 +625,15 @@ export class MCPServerBridge extends EventEmitter {
     }
   }
 
-  async updateServerConfig(serverType: IntegrationType, config: Partial<IntegrationConfig>): Promise<void> {
-    const existingConfig = this.serverConfigs.get(serverType);
-    if (existingConfig) {
-      this.serverConfigs.set(serverType, { ...existingConfig, ...config });
-      
-      // Update connection config if server is connected
-      const connection = this.connections.get(serverType);
-      if (connection) {
-        connection.config = { ...connection.config, ...config };
-      }
-    }
-  }
-
   async getIntegrationStatistics(): Promise<any> {
     const servers = Array.from(this.connections.values());
     const connected = servers.filter(s => s.status === 'connected').length;
     const total = servers.length;
-    
-    const averageResponseTime = servers.length > 0 
-      ? servers.reduce((sum, s) => sum + s.responseTime, 0) / servers.length 
+
+    const averageResponseTime = servers.length > 0
+      ? servers.reduce((sum, s) => sum + s.responseTime, 0) / servers.length
       : 0;
-    
+
     const healthStats = {
       healthy: servers.filter(s => s.health.status === 'healthy').length,
       degraded: servers.filter(s => s.health.status === 'degraded').length,
@@ -622,29 +646,30 @@ export class MCPServerBridge extends EventEmitter {
       connectionRate: total > 0 ? ((connected / total) * 100).toFixed(2) : '0',
       averageResponseTime: averageResponseTime.toFixed(2),
       healthDistribution: healthStats,
-      totalMessagesProcessed: this.messageQueue.length,
-      activeRequests: this.activeRequests.size,
       serverDetails: servers.map(s => ({
         name: s.name,
         status: s.status,
         health: s.health.status,
         responseTime: s.responseTime,
-        capabilities: s.capabilities.length,
+        capabilities: s.capabilities,
+        lastPing: s.lastPing,
       })),
     };
   }
 
   async close(): Promise<void> {
-    // Disconnect from all servers
+    // Stop health monitoring
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+    }
+
+    // Mark all servers as disconnected
     for (const serverType of this.connections.keys()) {
       await this.disconnectServer(serverType);
     }
 
-    // Clear all queues and requests
-    this.messageQueue = [];
-    this.activeRequests.clear();
     this.connections.clear();
-
-    console.log('MCP Server Bridge closed');
+    console.error('MCP Server Bridge closed');
   }
 }

@@ -1,0 +1,25 @@
+{
+  "name": "mcp-advanced-multi-agent-ecosystem",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Complete, production-ready MCP server ecosystem with multi-agent orchestration, skills management, search aggregation, context persistence, and GitHub OAuth integration.",
+  "license": "MIT",
+  "workspaces": [
+    "src/mcp-servers/*"
+  ],
+  "scripts": {
+    "bootstrap": "npm install",
+    "build": "npm run build:servers",
+    "build:servers": "npm run -ws --if-present build",
+    "start": "npm run start:all",
+    "start:all": "npm run -ws --if-present start",
+    "lint": "npm run lint:servers",
+    "lint:servers": "npm run -ws --if-present lint",
+    "test": "npm run test:servers",
+    "test:servers": "npm run -ws --if-present test",
+    "format": "npm run -ws --if-present format"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

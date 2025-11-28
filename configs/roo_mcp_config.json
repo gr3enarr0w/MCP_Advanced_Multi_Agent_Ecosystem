@@ -1,24 +1,24 @@
 {
   "mcpServers": {
     "context-persistence": {
-      "command": "python3",
+      "command": "python3.12",
       "args": ["-m", "context_persistence.server"],
       "env": {
-        "PYTHONPATH": "/Users/ceverson/MCP_structure_design/mcp-servers/context-persistence/src",
+        "PYTHONPATH": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/src/mcp-servers/context-persistence/src",
         "CONTEXT_DB": "/Users/ceverson/.mcp/context/db/conversation.db",
         "QDRANT_PATH": "/Users/ceverson/.mcp/context/qdrant"
       }
     },
     "task-orchestrator": {
       "command": "node",
-      "args": ["/Users/ceverson/MCP_structure_design/mcp-servers/task-orchestrator/dist/index.js"],
+      "args": ["/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/src/mcp-servers/task-orchestrator/dist/index.js"],
       "env": {
         "TASKS_DB": "/Users/ceverson/.mcp/tasks/tasks.db"
       }
     },
     "search-aggregator": {
       "command": "node",
-      "args": ["/Users/ceverson/MCP_structure_design/mcp-servers/search-aggregator/dist/index.js"],
+      "args": ["/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/src/mcp-servers/search-aggregator/dist/index.js"],
       "env": {
         "PERPLEXITY_API_KEY": "",
         "BRAVE_API_KEY": "",
@@ -28,10 +28,28 @@
     },
     "skills-manager": {
       "command": "node",
-      "args": ["/Users/ceverson/MCP_structure_design/mcp-servers/skills-manager/dist/index.js"],
+      "args": ["/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/src/mcp-servers/skills-manager/dist/index.js"],
       "env": {
         "SKILLS_DB_PATH": "/Users/ceverson/.mcp/skills/skills.db"
       }
+    },
+    "agent-swarm": {
+      "command": "node",
+      "args": ["/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/src/mcp-servers/agent-swarm/dist/index.js"],
+      "env": {
+        "AGENT_STORAGE": "/Users/ceverson/.mcp/agents/agent-swarm.db"
+      }
+    },
+    "github-oauth": {
+      "command": "node",
+      "args": ["/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/src/mcp-servers/github-oauth/index.js"],
+      "env": {
+        "PORT": "4000"
+      }
+    },
+    "chart-generator": {
+      "command": "node",
+      "args": ["/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/src/mcp-servers/chart-generator/dist/index.js"]
     }
   }
 }

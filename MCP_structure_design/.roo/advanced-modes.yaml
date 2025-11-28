@@ -1,0 +1,154 @@
+version: 1
+description: "Advanced Multi-Agent Framework modes wired to agent-swarm MCP server for Roo Code"
+modes:
+  - slug: orchestrator
+    name: "🔄 Orchestrator"
+    description: "Workflow orchestration specialist for SPARC-aligned, multi-agent coordination."
+    mcpServers:
+      - agent-swarm
+    tools:
+      - list_agents
+      - create_agent_team
+      - execute_sparc_workflow
+      - delegate_task
+      - list_tasks
+      - get_task_status
+      - send_boomerang_task
+      - share_knowledge
+    sharedInstructionsFile: "mcp-servers/advanced-multi-agent-framework/templates/custom-instructions-for-all-modes.md"
+    roleDefinitionSource: "mcp-servers/advanced-multi-agent-framework/templates/custom_modes.yaml:2"
+
+  - slug: architect
+    name: "🏗️ Architect"
+    description: "Systems architecture specialist for high-level design and decision records."
+    mcpServers:
+      - agent-swarm
+    tools:
+      - list_agents
+      - get_agent_capabilities
+      - delegate_task
+      - share_knowledge
+    sharedInstructionsFile: "mcp-servers/advanced-multi-agent-framework/templates/custom-instructions-for-all-modes.md"
+    roleDefinitionSource: "mcp-servers/advanced-multi-agent-framework/templates/custom_modes.yaml:108"
+
+  - slug: planner
+    name: "📅 Planner"
+    description: "Product planning specialist for requirements, backlog, and user story design."
+    mcpServers:
+      - agent-swarm
+    tools:
+      - list_agents
+      - delegate_task
+      - list_tasks
+      - get_task_status
+    sharedInstructionsFile: "mcp-servers/advanced-multi-agent-framework/templates/custom-instructions-for-all-modes.md"
+    roleDefinitionSource: "mcp-servers/advanced-multi-agent-framework/templates/custom_modes.yaml:148"
+
+  - slug: builder
+    name: "⚒️ Builder"
+    description: "Software implementation specialist for feature delivery and refactors."
+    mcpServers:
+      - agent-swarm
+    tools:
+      - list_agents
+      - delegate_task
+      - list_tasks
+      - get_task_status
+      - share_knowledge
+    sharedInstructionsFile: "mcp-servers/advanced-multi-agent-framework/templates/custom-instructions-for-all-modes.md"
+    roleDefinitionSource: "mcp-servers/advanced-multi-agent-framework/templates/custom_modes.yaml:185"
+
+  - slug: guardian
+    name: "🔒 Guardian"
+    description: "Infrastructure, CI/CD, and automation specialist."
+    mcpServers:
+      - agent-swarm
+    tools:
+      - list_agents
+      - delegate_task
+      - list_tasks
+      - get_task_status
+      - share_knowledge
+    sharedInstructionsFile: "mcp-servers/advanced-multi-agent-framework/templates/custom-instructions-for-all-modes.md"
+    roleDefinitionSource: "mcp-servers/advanced-multi-agent-framework/templates/custom_modes.yaml:228"
+
+  - slug: code
+    name: "💻 Code"
+    description: "Advanced code-focused implementation and optimization mode."
+    mcpServers:
+      - agent-swarm
+    tools:
+      - list_agents
+      - delegate_task
+      - list_tasks
+      - get_task_status
+      - share_knowledge
+    sharedInstructionsFile: "mcp-servers/advanced-multi-agent-framework/templates/custom-instructions-for-all-modes.md"
+    roleDefinitionSource: "mcp-servers/advanced-multi-agent-framework/templates/custom_modes.yaml:267"
+
+  - slug: ask
+    name: "❓ Ask"
+    description: "Information discovery and explanation specialist using multi-agent research."
+    mcpServers:
+      - agent-swarm
+    tools:
+      - list_agents
+      - delegate_task
+      - list_tasks
+      - get_task_status
+      - share_knowledge
+    sharedInstructionsFile: "mcp-servers/advanced-multi-agent-framework/templates/custom-instructions-for-all-modes.md"
+    roleDefinitionSource: "mcp-servers/advanced-multi-agent-framework/templates/custom_modes.yaml:307"
+
+  - slug: debug
+    name: "🐛 Debug"
+    description: "Technical diagnostics specialist for errors, traces, and root-cause analysis."
+    mcpServers:
+      - agent-swarm
+    tools:
+      - list_agents
+      - delegate_task
+      - list_tasks
+      - get_task_status
+      - share_knowledge
+    sharedInstructionsFile: "mcp-servers/advanced-multi-agent-framework/templates/custom-instructions-for-all-modes.md"
+    roleDefinitionSource: "mcp-servers/advanced-multi-agent-framework/templates/custom_modes.yaml:348"
+
+  - slug: memory
+    name: "📁 Memory"
+    description: "Knowledge management and documentation structuring specialist."
+    mcpServers:
+      - agent-swarm
+    tools:
+      - list_agents
+      - share_knowledge
+    sharedInstructionsFile: "mcp-servers/advanced-multi-agent-framework/templates/custom-instructions-for-all-modes.md"
+    roleDefinitionSource: "mcp-servers/advanced-multi-agent-framework/templates/custom_modes.yaml:389"
+
+  - slug: deep-research
+    name: "🔎 Deep Research"
+    description: "Deep research specialist for structured multi-source investigations."
+    mcpServers:
+      - agent-swarm
+    tools:
+      - list_agents
+      - delegate_task
+      - list_tasks
+      - get_task_status
+      - share_knowledge
+    sharedInstructionsFile: "mcp-servers/advanced-multi-agent-framework/templates/custom-instructions-for-all-modes.md"
+    roleDefinitionSource: "mcp-servers/advanced-multi-agent-framework/templates/custom_modes.yaml:429"
+
+  - slug: deep-scope
+    name: "🔬 Deep Scope"
+    description: "Issue scoping specialist for complex bug and feature investigations."
+    mcpServers:
+      - agent-swarm
+    tools:
+      - list_agents
+      - delegate_task
+      - list_tasks
+      - get_task_status
+      - share_knowledge
+    sharedInstructionsFile: "mcp-servers/advanced-multi-agent-framework/templates/custom-instructions-for-all-modes.md"
+    roleDefinitionSource: "mcp-servers/advanced-multi-agent-framework/templates/custom_modes.yaml:469"

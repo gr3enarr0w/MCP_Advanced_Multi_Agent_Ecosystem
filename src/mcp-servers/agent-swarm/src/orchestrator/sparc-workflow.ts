@@ -25,7 +25,7 @@ export interface SPARCTask {
   title: string;
   description: string;
   agentType: AgentType;
-  status: 'pending' | 'assigned' | 'running' | 'completed' | 'failed' | 'blocked';
+  status: 'pending' | 'assigned' | 'running' | 'completed' | 'failed' | 'blocked' | 'cancelled';
   priority: number;
   dependencies: string[];
   inputData: any;
@@ -566,6 +566,7 @@ export class SPARCWorkflowManager extends EventEmitter {
       priority: task.priority,
       dependencies: task.dependencies,
       startedAt: new Date(),
+      createdAt: new Date(),
     };
 
     // Store the task
@@ -601,7 +602,7 @@ export class SPARCWorkflowManager extends EventEmitter {
     await this.continueWorkflow(task.workflowId);
   }
 
-  private async updateWorkflowProgress(workflow: SPARCWorkflow, completedTask: SPARCTask): Promise<void> {
+  private async updateWorkflowProgress(workflow: SPARCWorkflow, _completedTask: SPARCTask): Promise<void> {
     workflow.metadata.completedTasks += 1;
     workflow.updatedAt = new Date();
 
@@ -776,13 +777,59 @@ export class SPARCWorkflowManager extends EventEmitter {
   }
 
   private async loadWorkflows(): Promise<void> {
-    // Load workflows from storage (if implementing persistence)
-    // For now, workflows are kept in memory
+    try {
+      const storedWorkflows = await this.storage.getAllSPARCWorkflows();
+      for (const stored of storedWorkflows) {
+        const workflow: SPARCWorkflow = {
+          id: stored.id,
+          projectDescription: stored.projectDescription,
+          requirements: stored.requirements || [],
+          constraints: stored.constraints || [],
+          currentPhase: stored.currentPhase as SPARCPhase,
+          phases: stored.phases || [],
+          status: stored.status as SPARCWorkflow['status'],
+          createdAt: stored.createdAt,
+          updatedAt: stored.createdAt, // Will be updated on next save
+          metadata: {
+            totalTasks: 0,
+            completedTasks: 0,
+            currentPhaseProgress: 0,
+            estimatedTimeRemaining: 0,
+            qualityScore: 0,
+          },
+        };
+        // Recalculate metadata from phases
+        if (workflow.phases.length > 0) {
+          workflow.metadata.totalTasks = workflow.phases.reduce((sum, p) => sum + (p.tasks?.length || 0), 0);
+          workflow.metadata.completedTasks = workflow.phases.reduce(
+            (sum, p) => sum + (p.tasks?.filter(t => t.status === 'completed').length || 0), 0
+          );
+        }
+        this.workflows.set(workflow.id, workflow);
+      }
+      console.error(`Loaded ${storedWorkflows.length} SPARC workflows from storage`);
+    } catch (error) {
+      console.error('Failed to load SPARC workflows:', error);
+    }
   }
 
   private async saveWorkflow(workflow: SPARCWorkflow): Promise<void> {
-    // Save workflow to storage (if implementing persistence)
-    // For now, workflows are kept in memory
+    try {
+      await this.storage.saveSPARCWorkflow({
+        id: workflow.id,
+        projectDescription: workflow.projectDescription,
+        requirements: workflow.requirements,
+        constraints: workflow.constraints,
+        currentPhase: workflow.currentPhase,
+        phases: workflow.phases,
+        status: workflow.status,
+        createdAt: workflow.createdAt,
+        completedAt: workflow.status === 'completed' ? new Date() : undefined,
+      });
+      workflow.updatedAt = new Date();
+    } catch (error) {
+      console.error(`Failed to save SPARC workflow ${workflow.id}:`, error);
+    }
   }
 
   private setupTaskCleanup(): void {

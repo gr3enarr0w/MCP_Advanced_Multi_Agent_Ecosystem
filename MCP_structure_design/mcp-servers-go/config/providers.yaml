@@ -1,0 +1,88 @@
+# MCP Advanced Multi-Agent Ecosystem - Provider Configuration
+# Personal Use - NanoGPT + OpenRouter + Vertex AI
+
+providers:
+  # PRIMARY: NanoGPT (Personal Use)
+  # Free tier: 60,000 calls/month
+  # Uses personalized model list from NanoGPT UI
+  nanogpt:
+    name: "NanoGPT"
+    type: "personal"
+    enabled: true
+    priority: 1
+    
+    # Personalized endpoint - uses your curated model list
+    # Configure visible models at: https://nano-gpt.com/settings/models
+    models_endpoint: "https://nano-gpt.com/api/personalized/v1/models"
+    chat_endpoint: "https://nano-gpt.com/api/v1/chat/completions"
+    
+    # Authentication (set NANOGPT_API_KEY in .env)
+    api_key: "${NANOGPT_API_KEY}"
+    
+    # Free tier tracking
+    free_tier_limit: 60000  # 60k free calls/month
+    free_tier_used: 0
+    free_tier_reset: "2025-12-01"  # Adjust to your billing cycle
+    
+    # Cost tracking (for paid tier)
+    cost_per_1k_tokens: 0.0025
+    currency: "USD"
+    
+    # Use your personalized model list from NanoGPT UI
+    respect_personalization: true
+
+  # SECONDARY: OpenRouter (Fallback)
+  # Use until balance depleted, then transition to NanoGPT fully
+  openrouter:
+    name: "OpenRouter"
+    type: "personal"
+    enabled: true
+    priority: 2
+    
+    # Authentication (set OPENROUTER_API_KEY in .env)
+    api_key: "${OPENROUTER_API_KEY}"
+    
+    # Balance management
+    use_until_balance_depleted: true
+    current_balance: 10.00  # Your current balance
+    min_balance_threshold: 2.00  # Stop using when below this
+    
+    # Models will be discovered dynamically
+    # Configure preferred models in OpenRouter UI
+
+  # TERTIARY: Vertex AI (Work Only)
+  # Separate tracking for work expenses
+  vertex-ai:
+    name: "Vertex AI"
+    type: "work"
+    enabled: true
+    priority: 1  # Primary for work context
+    
+    # GCP Configuration (set GCP_PROJECT_ID in .env)
+    project_id: "${GCP_PROJECT_ID}"
+    location: "us-central1"
+    
+    # Work expense tracking
+    cost_center: "work"
+    track_separately: true
+    cost_per_1k_tokens: 0.0035  # Vertex AI pricing
+    
+    # Model will be configured when we set up Vertex
+
+# Provider Selection Rules
+selection_rules:
+  personal:
+    primary: "nanogpt"
+    fallback: "openrouter"
+    max_cost_per_day: 10.00
+    
+  work:
+    primary: "vertex-ai"
+    fallback: "nanogpt"
+    max_cost_per_day: 50.00
+
+# Cost Limits & Alerts
+alerts:
+  daily_personal_limit: 10.00
+  daily_work_limit: 50.00
+  free_tier_warning: 50000  # Alert at 50k/60k used

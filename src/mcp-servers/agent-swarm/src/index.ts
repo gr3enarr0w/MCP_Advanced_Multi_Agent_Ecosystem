@@ -67,6 +67,14 @@ import { AgentLifecycleManager } from './agents/base/agent-lifecycle.js';
 import { SPARCWorkflowManager } from './orchestrator/sparc-workflow.js';
 import { BoomerangTaskManager } from './orchestrator/boomerang-task.js';
 
+// Phase 9: Session Management, Topologies, Memory, Workers
+import { SessionManager, TopologyType } from './sessions/session-manager.js';
+import { HierarchicalTopology } from './topologies/hierarchical-topology.js';
+import { MeshTopology } from './topologies/mesh-topology.js';
+import { StarTopology } from './topologies/star-topology.js';
+import { TieredMemory } from './memory/tiered-memory.js';
+import { WorkerSpawner } from './workers/worker-spawner.js';
+
 // Core Agent Swarm Server
 class AgentSwarmServer extends EventEmitter {
   private orchestrator: AgentOrchestrator;
@@ -75,6 +83,12 @@ class AgentSwarmServer extends EventEmitter {
   private lifecycleManager: AgentLifecycleManager;
   private sparcManager: SPARCWorkflowManager;
   private boomerangManager: BoomerangTaskManager;
+
+  // Phase 9: New components
+  private sessionManager: SessionManager;
+  private tieredMemory: TieredMemory;
+  private workerSpawner: WorkerSpawner;
+
   private initialized: boolean = false;
 
   constructor() {
@@ -85,6 +99,11 @@ class AgentSwarmServer extends EventEmitter {
     this.lifecycleManager = new AgentLifecycleManager(this.storage);
     this.sparcManager = new SPARCWorkflowManager(this.storage);
     this.boomerangManager = new BoomerangTaskManager(this.storage);
+
+    // Phase 9: Initialize new components
+    this.sessionManager = new SessionManager();
+    this.tieredMemory = new TieredMemory();
+    this.workerSpawner = new WorkerSpawner();
   }
 
   async initialize(): Promise<void> {
@@ -93,7 +112,7 @@ class AgentSwarmServer extends EventEmitter {
     try {
       // Initialize storage
       await this.storage.initialize();
-      
+
       // Initialize core components
       await this.orchestrator.initialize();
       await this.mcpBridge.initialize();
@@ -101,11 +120,15 @@ class AgentSwarmServer extends EventEmitter {
       await this.sparcManager.initialize();
       await this.boomerangManager.initialize();
 
+      // Phase 9: Initialize new components
+      await this.sessionManager.initialize();
+      await this.tieredMemory.initialize();
+
       // Set up event handlers
       this.setupEventHandlers();
 
       this.initialized = true;
-      console.error('Agent Swarm Server initialized successfully');
+      console.error('Agent Swarm Server initialized successfully (Phase 9 enhancements active)');
     } catch (error) {
       console.error('Failed to initialize Agent Swarm Server:', error);
       throw error;
@@ -210,14 +233,17 @@ class AgentSwarmServer extends EventEmitter {
 
   async shutdown(): Promise<void> {
     console.log('Shutting down Agent Swarm Server...');
-    
+
     // Clean up resources
     await this.storage.close();
     await this.mcpBridge.close();
     await this.lifecycleManager.shutdown();
     await this.sparcManager.shutdown();
     await this.boomerangManager.shutdown();
-    
+
+    // Phase 9: Shutdown new components
+    this.tieredMemory.shutdown();
+
     this.initialized = false;
     console.log('Agent Swarm Server shutdown complete');
   }
@@ -597,6 +623,287 @@ const tools: Tool[] = [
         },
       },
       required: ['fromAgentId', 'knowledgeType', 'content'],
+    },
+  },
+  // Phase 9: Session Management Tools
+  {
+    name: 'swarm_session_create',
+    description: 'Create a new swarm session with specified topology',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Project ID for this session',
+        },
+        name: {
+          type: 'string',
+          description: 'Session name',
+        },
+        topology: {
+          type: 'string',
+          enum: ['hierarchical', 'mesh', 'star', 'dynamic'],
+          description: 'Swarm topology type',
+        },
+        description: {
+          type: 'string',
+          description: 'Session description',
+        },
+        maxAgents: {
+          type: 'number',
+          description: 'Maximum number of agents',
+          default: 10,
+        },
+      },
+      required: ['projectId', 'name', 'topology'],
+    },
+  },
+  {
+    name: 'swarm_session_resume',
+    description: 'Resume a paused or saved swarm session',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: {
+          type: 'string',
+          description: 'Session ID to resume',
+        },
+        checkpointId: {
+          type: 'string',
+          description: 'Optional checkpoint ID to resume from',
+        },
+      },
+      required: ['sessionId'],
+    },
+  },
+  {
+    name: 'swarm_checkpoint',
+    description: 'Create a checkpoint of current swarm session state',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        sessionId: {
+          type: 'string',
+          description: 'Session ID to checkpoint',
+        },
+        reason: {
+          type: 'string',
+          description: 'Reason for checkpoint',
+          default: 'manual',
+        },
+      },
+      required: ['sessionId'],
+    },
+  },
+  {
+    name: 'swarm_session_list',
+    description: 'List all swarm sessions with optional filters',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Filter by project ID',
+        },
+        status: {
+          type: 'string',
+          enum: ['initializing', 'active', 'paused', 'completed', 'failed', 'terminated'],
+          description: 'Filter by status',
+        },
+        topology: {
+          type: 'string',
+          enum: ['hierarchical', 'mesh', 'star', 'dynamic'],
+          description: 'Filter by topology',
+        },
+      },
+    },
+  },
+  // Phase 9: Worker Management Tools
+  {
+    name: 'spawn_worker_agents',
+    description: 'Spawn parallel worker agents for task processing',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        agentType: {
+          type: 'string',
+          enum: ['research', 'architect', 'implementation', 'testing', 'review', 'documentation', 'debugger'],
+          description: 'Type of workers to spawn',
+        },
+        count: {
+          type: 'number',
+          description: 'Number of workers to spawn',
+          default: 3,
+        },
+        poolId: {
+          type: 'string',
+          description: 'Worker pool ID (creates new pool if not specified)',
+        },
+      },
+      required: ['agentType', 'count'],
+    },
+  },
+  {
+    name: 'worker_pool_create',
+    description: 'Create a new worker pool for managing parallel agents',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        name: {
+          type: 'string',
+          description: 'Pool name',
+        },
+        agentType: {
+          type: 'string',
+          enum: ['research', 'architect', 'implementation', 'testing', 'review', 'documentation', 'debugger'],
+          description: 'Agent type for this pool',
+        },
+        minWorkers: {
+          type: 'number',
+          description: 'Minimum number of workers',
+          default: 1,
+        },
+        maxWorkers: {
+          type: 'number',
+          description: 'Maximum number of workers',
+          default: 10,
+        },
+        loadBalanceStrategy: {
+          type: 'string',
+          enum: ['round-robin', 'least-loaded', 'random', 'weighted', 'priority'],
+          description: 'Load balancing strategy',
+          default: 'least-loaded',
+        },
+      },
+      required: ['name', 'agentType'],
+    },
+  },
+  {
+    name: 'worker_pool_stats',
+    description: 'Get statistics for a worker pool',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        poolId: {
+          type: 'string',
+          description: 'Pool ID to get stats for',
+        },
+      },
+      required: ['poolId'],
+    },
+  },
+  // Phase 9: Tiered Memory Tools
+  {
+    name: 'memory_store_tiered',
+    description: 'Store value in tiered memory (working/episodic/persistent)',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        key: {
+          type: 'string',
+          description: 'Memory key',
+        },
+        value: {
+          type: 'object',
+          description: 'Value to store',
+        },
+        tier: {
+          type: 'string',
+          enum: ['working', 'episodic', 'persistent'],
+          description: 'Memory tier',
+          default: 'working',
+        },
+        category: {
+          type: 'string',
+          enum: ['task', 'learning', 'interaction', 'context', 'pattern', 'knowledge'],
+          description: 'Memory category',
+          default: 'context',
+        },
+        agentId: {
+          type: 'string',
+          description: 'Associated agent ID',
+        },
+        importance: {
+          type: 'number',
+          description: 'Importance score (0-1)',
+          default: 0.5,
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Tags for categorization',
+        },
+        isPinned: {
+          type: 'boolean',
+          description: 'Prevent auto-demotion',
+          default: false,
+        },
+      },
+      required: ['key', 'value'],
+    },
+  },
+  {
+    name: 'memory_retrieve',
+    description: 'Retrieve value from tiered memory',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        key: {
+          type: 'string',
+          description: 'Memory key to retrieve',
+        },
+        tier: {
+          type: 'string',
+          enum: ['working', 'episodic', 'persistent'],
+          description: 'Specific tier to search (searches all if not specified)',
+        },
+      },
+      required: ['key'],
+    },
+  },
+  {
+    name: 'memory_search',
+    description: 'Search memory by criteria',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        tier: {
+          type: 'string',
+          enum: ['working', 'episodic', 'persistent'],
+          description: 'Filter by tier',
+        },
+        category: {
+          type: 'string',
+          enum: ['task', 'learning', 'interaction', 'context', 'pattern', 'knowledge'],
+          description: 'Filter by category',
+        },
+        agentId: {
+          type: 'string',
+          description: 'Filter by agent ID',
+        },
+        tags: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Filter by tags',
+        },
+        minImportance: {
+          type: 'number',
+          description: 'Minimum importance score',
+        },
+        limit: {
+          type: 'number',
+          description: 'Maximum results to return',
+          default: 10,
+        },
+      },
+    },
+  },
+  {
+    name: 'memory_stats',
+    description: 'Get tiered memory statistics',
+    inputSchema: {
+      type: 'object',
+      properties: {},
     },
   },
 ];
@@ -1146,6 +1453,327 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 fromAgent: args?.fromAgentId,
                 toAgent: args?.toAgentId || 'broadcast',
                 knowledgeType: args?.knowledgeType,
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      // Phase 9: Session Management Tools
+      case 'swarm_session_create': {
+        const session = await agentSwarm['sessionManager'].createSession({
+          projectId: args?.projectId,
+          name: args?.name,
+          topology: args?.topology as TopologyType,
+          description: args?.description,
+          config: {
+            maxAgents: args?.maxAgents || 10,
+            maxConcurrentTasks: 5,
+            checkpointInterval: 60000,
+            autoCheckpoint: true,
+            persistToDisk: true,
+            maxCheckpoints: 10,
+          },
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                session: {
+                  id: session.id,
+                  name: session.name,
+                  topology: session.topology,
+                  status: session.status,
+                  projectId: session.projectId,
+                  startedAt: session.startedAt,
+                },
+                message: 'Swarm session created successfully',
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'swarm_session_resume': {
+        const session = await agentSwarm['sessionManager'].resumeSession(
+          args?.sessionId,
+          args?.checkpointId
+        );
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                session: {
+                  id: session.id,
+                  name: session.name,
+                  status: session.status,
+                  topology: session.topology,
+                  activeAgents: session.agents.length,
+                  tasksCompleted: session.tasksCompleted,
+                  tasksTotal: session.tasksTotal,
+                },
+                message: 'Session resumed successfully',
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'swarm_checkpoint': {
+        const checkpoint = await agentSwarm['sessionManager'].createCheckpoint(
+          args?.sessionId,
+          args?.reason || 'manual'
+        );
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                checkpoint: {
+                  id: checkpoint.id,
+                  sessionId: checkpoint.sessionId,
+                  timestamp: checkpoint.timestamp,
+                  reason: checkpoint.reason,
+                },
+                message: 'Checkpoint created successfully',
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'swarm_session_list': {
+        const sessions = agentSwarm['sessionManager'].listSessions({
+          projectId: args?.projectId,
+          status: args?.status as any,
+          topology: args?.topology as any,
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                sessions: sessions.map(s => ({
+                  id: s.id,
+                  name: s.name,
+                  projectId: s.projectId,
+                  topology: s.topology,
+                  status: s.status,
+                  agents: s.agents.length,
+                  tasksCompleted: s.tasksCompleted,
+                  tasksTotal: s.tasksTotal,
+                  startedAt: s.startedAt,
+                  lastActiveAt: s.lastActiveAt,
+                })),
+                count: sessions.length,
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      // Phase 9: Worker Management Tools
+      case 'spawn_worker_agents': {
+        const workers = await agentSwarm['workerSpawner'].spawnWorkers({
+          agentType: args?.agentType as AgentType,
+          count: args?.count || 3,
+          poolId: args?.poolId,
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                workers: workers.map(w => ({
+                  id: w.id,
+                  name: w.name,
+                  type: w.type,
+                  status: w.status,
+                  capabilities: w.capabilities,
+                })),
+                count: workers.length,
+                message: `Spawned ${workers.length} worker agents`,
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'worker_pool_create': {
+        const pool = agentSwarm['workerSpawner'].createPool({
+          name: args?.name,
+          agentType: args?.agentType as AgentType,
+          minWorkers: args?.minWorkers || 1,
+          maxWorkers: args?.maxWorkers || 10,
+          loadBalanceStrategy: args?.loadBalanceStrategy as any || 'least-loaded',
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                pool: {
+                  id: pool.id,
+                  name: pool.name,
+                  agentType: pool.agentType,
+                  workers: pool.workers.size,
+                  minWorkers: pool.minWorkers,
+                  maxWorkers: pool.maxWorkers,
+                  loadBalanceStrategy: pool.loadBalanceStrategy,
+                  status: pool.status,
+                },
+                message: 'Worker pool created successfully',
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'worker_pool_stats': {
+        const stats = agentSwarm['workerSpawner'].getPoolStats(args?.poolId);
+
+        if (!stats) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({ error: `Pool ${args?.poolId} not found` }),
+              },
+            ],
+            isError: true,
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                poolId: args?.poolId,
+                stats,
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      // Phase 9: Tiered Memory Tools
+      case 'memory_store_tiered': {
+        const entry = await agentSwarm['tieredMemory'].store({
+          key: args?.key,
+          value: args?.value,
+          tier: args?.tier as any,
+          category: args?.category as any,
+          agentId: args?.agentId,
+          importance: args?.importance,
+          tags: args?.tags,
+          isPinned: args?.isPinned,
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                entry: {
+                  id: entry.id,
+                  key: entry.key,
+                  tier: entry.tier,
+                  category: entry.category,
+                  importance: entry.importance,
+                  createdAt: entry.createdAt,
+                },
+                message: 'Value stored in tiered memory',
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'memory_retrieve': {
+        const value = await agentSwarm['tieredMemory'].retrieve(
+          args?.key,
+          args?.tier as any
+        );
+
+        if (value === null) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  message: `No value found for key: ${args?.key}`,
+                  key: args?.key,
+                }),
+              },
+            ],
+          };
+        }
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                key: args?.key,
+                value,
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'memory_search': {
+        const results = agentSwarm['tieredMemory'].search({
+          tier: args?.tier as any,
+          category: args?.category as any,
+          agentId: args?.agentId,
+          tags: args?.tags,
+          minImportance: args?.minImportance,
+          limit: args?.limit || 10,
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                results: results.map(r => ({
+                  id: r.id,
+                  key: r.key,
+                  tier: r.tier,
+                  category: r.category,
+                  importance: r.importance,
+                  accessCount: r.accessCount,
+                  agentId: r.agentId,
+                  tags: r.tags,
+                  createdAt: r.createdAt,
+                  lastAccessed: r.lastAccessed,
+                })),
+                count: results.length,
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'memory_stats': {
+        const stats = agentSwarm['tieredMemory'].getStats();
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                stats,
               }, null, 2),
             },
           ],

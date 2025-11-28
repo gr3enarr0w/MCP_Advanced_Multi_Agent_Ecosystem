@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mcp-advanced-multi-agent-ecosystem"
+version = "1.0.0"
+description = "Coordinated MCP server ecosystem with multi-agent orchestration, skills management, search aggregation, context persistence, and auth."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [
+  { name = "Your Name or Organization" }
+]
+
+# This file provides a shared Python toolchain definition for Python-based MCP servers.
+# Individual servers (e.g. context-persistence) keep their own pyproject.toml/venv as needed.
+
+[tool.mcp-ecosystem]
+servers = [
+  "src/mcp-servers/context-persistence",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py310", "py311", "py312"]
+
+[tool.isort]
+profile = "black"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.pytest.ini_options]
+pythonpath = [
+  "src"
+]

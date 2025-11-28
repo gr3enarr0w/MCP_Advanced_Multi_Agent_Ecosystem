@@ -11,6 +11,7 @@
  */
 
 import initSqlJs, { Database as SqlJsDatabase } from 'sql.js';
+import type { SqlValue } from 'sql.js';
 import { 
   Agent, 
   Task, 
@@ -18,11 +19,24 @@ import {
   AgentMemory, 
   AgentTeam, 
   KnowledgeShare,
-  ConflictResolution
+  ConflictResolution,
+  TaskStatus,
+  MessageType
+} from '../types/agents.js';
+import type {
+  AgentType,
+  AgentStatus,
+  LearningData,
+  ResourceLimits,
+  PerformanceMetrics,
+  MemoryType,
+  MemoryCategory,
+  MessagePriority
 } from '../types/agents.js';
 import { DatabaseConfig } from '../types/database.js';
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { TextDecoder } from 'util';
 
 /**
  * Agent Storage Manager
@@ -32,6 +46,76 @@ export class AgentStorage {
   private db: SqlJsDatabase | null = null;
   private dbPath: string;
   private config: DatabaseConfig;
+  private decoder = new TextDecoder();
+
+  private normalizeValue(value: SqlValue | undefined | null): string {
+    if (value === null || value === undefined) return '';
+    if (typeof value === 'string') return value;
+    if (typeof value === 'number' || typeof value === 'boolean') return value.toString();
+    return this.decoder.decode(value);
+  }
+
+  private toJson<T>(value: SqlValue | undefined | null, fallback: T): T {
+    const text = this.normalizeValue(value);
+    if (!text) return fallback;
+    try {
+      return JSON.parse(text) as T;
+    } catch {
+      return fallback;
+    }
+  }
+
+  private toNumber(value: SqlValue | undefined | null): number | undefined {
+    const text = this.normalizeValue(value);
+    if (text === '') return undefined;
+    const parsed = Number(text);
+    return Number.isNaN(parsed) ? undefined : parsed;
+  }
+
+  private toDate(value: SqlValue | undefined | null): Date | undefined {
+    const text = this.normalizeValue(value);
+    if (!text) return undefined;
+    const date = new Date(text);
+    return Number.isNaN(date.getTime()) ? undefined : date;
+  }
+
+  private toBoolean(value: SqlValue | undefined | null): boolean {
+    const text = this.normalizeValue(value).toLowerCase();
+    return text === '1' || text === 'true';
+  }
+
+  private toOptionalString(value: SqlValue | undefined | null): string | undefined {
+    const normalized = this.normalizeValue(value);
+    return normalized === '' ? undefined : normalized;
+  }
+
+  private toMessagePriority(value: SqlValue | undefined | null): MessagePriority {
+    const num = this.toNumber(value) ?? 0;
+    const clamped = Math.min(4, Math.max(0, Math.round(num)));
+    return clamped as MessagePriority;
+  }
+
+  private readonly defaultResourceLimits: ResourceLimits = {
+    maxMemoryMB: 1024,
+    maxCPUTimeMs: 1800000,
+    maxDiskSpaceMB: 500,
+    maxNetworkCalls: 50,
+    maxFileHandles: 20,
+    executionTimeoutMs: 1800000,
+    maxConcurrentTasks: 2,
+  };
+
+  private readonly defaultLearningData: LearningData = {
+    performanceHistory: [],
+    successPatterns: [],
+    failurePatterns: [],
+    learnedSkills: [],
+    discoveredPatterns: [],
+    effectiveStrategies: [],
+    behaviorAdaptations: [],
+    preferenceChanges: [],
+    capabilityEnhancements: [],
+  };
 
   constructor(dbPath: string, config?: Partial<DatabaseConfig>) {
     this.dbPath = dbPath;
@@ -284,6 +368,8 @@ export class AgentStorage {
       currentTasks: JSON.stringify(agent.currentTasks),
       learningData: JSON.stringify(agent.learningData),
       updatedAt: now,
+      createdAt: agent.createdAt ? agent.createdAt.toISOString() : now,
+      lastActive: agent.lastActive ? agent.lastActive.toISOString() : now,
     };
 
     this.db.run(`
@@ -310,20 +396,20 @@ export class AgentStorage {
 
     const agents: Agent[] = [];
     for (const row of result[0].values) {
-      const agent: any = {
-        id: row[0],
-        name: row[1],
-        type: row[2],
-        version: row[3],
-        status: row[4],
-        capabilities: JSON.parse(row[5]),
-        maxConcurrentTasks: row[6],
-        resourceLimits: JSON.parse(row[7]),
-        performanceMetrics: JSON.parse(row[8]),
-        createdAt: row[9],
-        lastActive: row[10],
-        currentTasks: JSON.parse(row[11]),
-        learningData: JSON.parse(row[12]),
+      const agent: Agent = {
+        id: this.normalizeValue(row[0]),
+        name: this.normalizeValue(row[1]),
+        type: this.normalizeValue(row[2]) as AgentType,
+        version: this.normalizeValue(row[3]),
+        status: this.normalizeValue(row[4]) as AgentStatus,
+        capabilities: this.toJson<string[]>(row[5], []),
+        maxConcurrentTasks: this.toNumber(row[6]) ?? 1,
+        resourceLimits: this.toJson<ResourceLimits>(row[7], this.defaultResourceLimits),
+        performanceMetrics: this.toJson<PerformanceMetrics[]>(row[8], []),
+        createdAt: this.toDate(row[9]) ?? new Date(),
+        lastActive: this.toDate(row[10]) ?? new Date(),
+        currentTasks: this.toJson<string[]>(row[11], []),
+        learningData: this.toJson<LearningData>(row[12], this.defaultLearningData),
       };
       agents.push(agent);
     }
@@ -338,19 +424,19 @@ export class AgentStorage {
 
     const row = result[0].values[0];
     return {
-      id: row[0],
-      name: row[1],
-      type: row[2],
-      version: row[3],
-      status: row[4],
-      capabilities: JSON.parse(row[5]),
-      maxConcurrentTasks: row[6],
-      resourceLimits: JSON.parse(row[7]),
-      performanceMetrics: JSON.parse(row[8]),
-      createdAt: row[9],
-      lastActive: row[10],
-      currentTasks: JSON.parse(row[11]),
-      learningData: JSON.parse(row[12]),
+      id: this.normalizeValue(row[0]),
+      name: this.normalizeValue(row[1]),
+      type: this.normalizeValue(row[2]) as AgentType,
+      version: this.normalizeValue(row[3]),
+      status: this.normalizeValue(row[4]) as AgentStatus,
+      capabilities: this.toJson<string[]>(row[5], []),
+      maxConcurrentTasks: this.toNumber(row[6]) ?? 1,
+      resourceLimits: this.toJson<ResourceLimits>(row[7], this.defaultResourceLimits),
+      performanceMetrics: this.toJson<PerformanceMetrics[]>(row[8], []),
+      createdAt: this.toDate(row[9]) ?? new Date(),
+      lastActive: this.toDate(row[10]) ?? new Date(),
+      currentTasks: this.toJson<string[]>(row[11], []),
+      learningData: this.toJson<LearningData>(row[12], this.defaultLearningData),
     };
   }
 
@@ -359,13 +445,19 @@ export class AgentStorage {
     if (!this.db) throw new Error('Database not initialized');
 
     const now = new Date().toISOString();
+    const createdAt = task.createdAt ? task.createdAt.toISOString() : now;
+    const startedAt = task.startedAt ? task.startedAt.toISOString() : null;
+    const completedAt = task.completedAt ? task.completedAt.toISOString() : null;
+
     const taskData = {
       ...task,
       inputData: task.inputData ? JSON.stringify(task.inputData) : null,
       outputData: task.outputData ? JSON.stringify(task.outputData) : null,
       dependencies: JSON.stringify(task.dependencies),
-      startedAt: task.startedAt ? task.startedAt.toISOString() : null,
-      completedAt: task.completedAt ? task.completedAt.toISOString() : null,
+      startedAt,
+      completedAt,
+      resultQuality: task.resultQuality ?? null,
+      createdAt,
       updatedAt: now,
     };
 
@@ -393,23 +485,23 @@ export class AgentStorage {
 
     const tasks: Task[] = [];
     for (const row of result[0].values) {
-      const task: any = {
-        id: row[0],
-        agentId: row[1],
-        teamId: row[2],
-        type: row[3],
-        description: row[4],
-        inputData: row[5] ? JSON.parse(row[5]) : undefined,
-        outputData: row[6] ? JSON.parse(row[6]) : undefined,
-        status: row[7],
-        priority: row[8],
-        dependencies: JSON.parse(row[9]),
-        startedAt: row[10] ? new Date(row[10]) : undefined,
-        completedAt: row[11] ? new Date(row[11]) : undefined,
-        executionTime: row[12],
-        errorMessage: row[13],
-        resultQuality: row[14],
-        createdAt: row[15],
+      const task: Task = {
+        id: this.normalizeValue(row[0]),
+        agentId: this.toOptionalString(row[1]),
+        teamId: this.toOptionalString(row[2]),
+        type: this.normalizeValue(row[3]) as AgentType,
+        description: this.normalizeValue(row[4]),
+        inputData: row[5] ? JSON.parse(this.normalizeValue(row[5])) : undefined,
+        outputData: row[6] ? JSON.parse(this.normalizeValue(row[6])) : undefined,
+        status: this.normalizeValue(row[7]) as TaskStatus,
+        priority: this.toNumber(row[8]) ?? 1,
+        dependencies: this.toJson<string[]>(row[9], []),
+        startedAt: this.toDate(row[10]),
+        completedAt: this.toDate(row[11]),
+        executionTime: this.toNumber(row[12]),
+        errorMessage: this.toOptionalString(row[13]),
+        resultQuality: this.toNumber(row[14]),
+        createdAt: this.toDate(row[15]) ?? new Date(),
       };
       tasks.push(task);
     }
@@ -424,22 +516,22 @@ export class AgentStorage {
 
     const row = result[0].values[0];
     return {
-      id: row[0],
-      agentId: row[1],
-      teamId: row[2],
-      type: row[3],
-      description: row[4],
-      inputData: row[5] ? JSON.parse(row[5]) : undefined,
-      outputData: row[6] ? JSON.parse(row[6]) : undefined,
-      status: row[7],
-      priority: row[8],
-      dependencies: JSON.parse(row[9]),
-      startedAt: row[10] ? new Date(row[10]) : undefined,
-      completedAt: row[11] ? new Date(row[11]) : undefined,
-      executionTime: row[12],
-      errorMessage: row[13],
-      resultQuality: row[14],
-      createdAt: row[15],
+      id: this.normalizeValue(row[0]),
+      agentId: this.toOptionalString(row[1]),
+      teamId: this.toOptionalString(row[2]),
+      type: this.normalizeValue(row[3]) as AgentType,
+      description: this.normalizeValue(row[4]),
+      inputData: row[5] ? JSON.parse(this.normalizeValue(row[5])) : undefined,
+      outputData: row[6] ? JSON.parse(this.normalizeValue(row[6])) : undefined,
+      status: this.normalizeValue(row[7]) as TaskStatus,
+      priority: this.toNumber(row[8]) ?? 1,
+      dependencies: this.toJson<string[]>(row[9], []),
+      startedAt: this.toDate(row[10]),
+      completedAt: this.toDate(row[11]),
+      executionTime: this.toNumber(row[12]),
+      errorMessage: this.toOptionalString(row[13]),
+      resultQuality: this.toNumber(row[14]),
+      createdAt: this.toDate(row[15]) ?? new Date(),
     };
   }
 
@@ -483,20 +575,20 @@ export class AgentStorage {
 
     const messages: AgentMessage[] = [];
     for (const row of result[0].values) {
-      const message: any = {
-        id: row[0],
-        from: row[1],
-        to: row[2],
-        type: row[3],
-        priority: row[4],
-        timestamp: new Date(row[5]),
-        correlationId: row[6],
-        content: JSON.parse(row[7]),
-        context: JSON.parse(row[8]),
-        requiresResponse: row[9] === 1,
-        timeout: row[10],
-        retryCount: row[11],
-        maxRetries: row[12],
+      const message: AgentMessage = {
+        id: this.normalizeValue(row[0]),
+        from: this.normalizeValue(row[1]),
+        to: this.toOptionalString(row[2]),
+        type: this.normalizeValue(row[3]) as MessageType,
+        priority: this.toMessagePriority(row[4]),
+        timestamp: this.toDate(row[5]) ?? new Date(),
+        correlationId: this.toOptionalString(row[6]),
+        content: this.toJson<any>(row[7], {}),
+        context: this.toJson<any>(row[8], {}),
+        requiresResponse: this.toBoolean(row[9]),
+        timeout: this.toNumber(row[10]),
+        retryCount: this.toNumber(row[11]) ?? 0,
+        maxRetries: this.toNumber(row[12]) ?? 0,
       };
       messages.push(message);
     }
@@ -541,18 +633,18 @@ export class AgentStorage {
 
     const memories: AgentMemory[] = [];
     for (const row of result[0].values) {
-      const memory: any = {
-        id: row[0],
-        agentId: row[1],
-        memoryType: row[2],
-        category: row[3],
-        key: row[4],
-        value: JSON.parse(row[5]),
-        importance: row[6],
-        createdAt: new Date(row[7]),
-        lastAccessed: new Date(row[8]),
-        accessCount: row[9],
-        expiresAt: row[10] ? new Date(row[10]) : undefined,
+      const memory: AgentMemory = {
+        id: this.normalizeValue(row[0]),
+        agentId: this.normalizeValue(row[1]),
+        memoryType: this.normalizeValue(row[2]) as MemoryType,
+        category: this.normalizeValue(row[3]) as MemoryCategory,
+        key: this.normalizeValue(row[4]),
+        value: this.toJson<any>(row[5], null),
+        importance: this.toNumber(row[6]) ?? 0,
+        createdAt: this.toDate(row[7]) ?? new Date(),
+        lastAccessed: this.toDate(row[8]) ?? new Date(),
+        accessCount: this.toNumber(row[9]) ?? 0,
+        expiresAt: this.toDate(row[10]),
       };
       memories.push(memory);
     }
@@ -578,6 +670,203 @@ export class AgentStorage {
       share.effectiveness, now
     ]);
 
+    this.save();
+  }
+
+  // SPARC Workflow operations
+  async saveSPARCWorkflow(workflow: {
+    id: string;
+    projectDescription: string;
+    requirements?: string[];
+    constraints?: string[];
+    currentPhase: string;
+    phases: any[];
+    status: string;
+    createdAt: Date;
+    completedAt?: Date;
+  }): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const now = new Date().toISOString();
+    this.db.run(`
+      INSERT OR REPLACE INTO sparc_workflows
+      (id, projectDescription, requirements, constraints, currentPhase, phases,
+       status, createdAt, completedAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      workflow.id,
+      workflow.projectDescription,
+      JSON.stringify(workflow.requirements || []),
+      JSON.stringify(workflow.constraints || []),
+      workflow.currentPhase,
+      JSON.stringify(workflow.phases),
+      workflow.status,
+      workflow.createdAt.toISOString(),
+      workflow.completedAt ? workflow.completedAt.toISOString() : null,
+      now
+    ]);
+
+    this.save();
+  }
+
+  async getAllSPARCWorkflows(): Promise<any[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = this.db.exec('SELECT * FROM sparc_workflows ORDER BY createdAt DESC');
+    if (result.length === 0) return [];
+
+    const workflows: any[] = [];
+    for (const row of result[0].values) {
+      workflows.push({
+        id: this.normalizeValue(row[0]),
+        projectDescription: this.normalizeValue(row[1]),
+        requirements: this.toJson<string[]>(row[2], []),
+        constraints: this.toJson<string[]>(row[3], []),
+        currentPhase: this.normalizeValue(row[4]),
+        phases: this.toJson<any[]>(row[5], []),
+        status: this.normalizeValue(row[6]),
+        createdAt: this.toDate(row[7]) ?? new Date(),
+        completedAt: this.toDate(row[8]),
+      });
+    }
+    return workflows;
+  }
+
+  async getSPARCWorkflow(workflowId: string): Promise<any | null> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = this.db.exec('SELECT * FROM sparc_workflows WHERE id = ?', [workflowId]);
+    if (result.length === 0 || result[0].values.length === 0) return null;
+
+    const row = result[0].values[0];
+    return {
+      id: this.normalizeValue(row[0]),
+      projectDescription: this.normalizeValue(row[1]),
+      requirements: this.toJson<string[]>(row[2], []),
+      constraints: this.toJson<string[]>(row[3], []),
+      currentPhase: this.normalizeValue(row[4]),
+      phases: this.toJson<any[]>(row[5], []),
+      status: this.normalizeValue(row[6]),
+      createdAt: this.toDate(row[7]) ?? new Date(),
+      completedAt: this.toDate(row[8]),
+    };
+  }
+
+  async deleteSPARCWorkflow(workflowId: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.run('DELETE FROM sparc_workflows WHERE id = ?', [workflowId]);
+    this.save();
+  }
+
+  // Boomerang Task operations
+  async saveBoomerangTask(task: {
+    id: string;
+    originalTaskId: string;
+    targetAgent: string;
+    feedback: string;
+    priority: number;
+    status: string;
+    sentAt: Date;
+    returnedAt?: Date;
+    result?: any;
+  }): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const now = new Date().toISOString();
+    this.db.run(`
+      INSERT OR REPLACE INTO boomerang_tasks
+      (id, originalTaskId, targetAgent, feedback, priority, status,
+       sentAt, returnedAt, result, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      task.id,
+      task.originalTaskId,
+      task.targetAgent,
+      task.feedback,
+      task.priority,
+      task.status,
+      task.sentAt.toISOString(),
+      task.returnedAt ? task.returnedAt.toISOString() : null,
+      task.result ? JSON.stringify(task.result) : null,
+      now,
+      now
+    ]);
+
+    this.save();
+  }
+
+  async getAllBoomerangTasks(): Promise<any[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = this.db.exec('SELECT * FROM boomerang_tasks ORDER BY sentAt DESC');
+    if (result.length === 0) return [];
+
+    const tasks: any[] = [];
+    for (const row of result[0].values) {
+      tasks.push({
+        id: this.normalizeValue(row[0]),
+        originalTaskId: this.normalizeValue(row[1]),
+        targetAgent: this.normalizeValue(row[2]),
+        feedback: this.normalizeValue(row[3]),
+        priority: this.toNumber(row[4]) ?? 2,
+        status: this.normalizeValue(row[5]),
+        sentAt: this.toDate(row[6]) ?? new Date(),
+        returnedAt: this.toDate(row[7]),
+        result: this.toJson<any>(row[8], null),
+      });
+    }
+    return tasks;
+  }
+
+  async getBoomerangTask(taskId: string): Promise<any | null> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = this.db.exec('SELECT * FROM boomerang_tasks WHERE id = ?', [taskId]);
+    if (result.length === 0 || result[0].values.length === 0) return null;
+
+    const row = result[0].values[0];
+    return {
+      id: this.normalizeValue(row[0]),
+      originalTaskId: this.normalizeValue(row[1]),
+      targetAgent: this.normalizeValue(row[2]),
+      feedback: this.normalizeValue(row[3]),
+      priority: this.toNumber(row[4]) ?? 2,
+      status: this.normalizeValue(row[5]),
+      sentAt: this.toDate(row[6]) ?? new Date(),
+      returnedAt: this.toDate(row[7]),
+      result: this.toJson<any>(row[8], null),
+    };
+  }
+
+  async getBoomerangTasksByOriginalTask(originalTaskId: string): Promise<any[]> {
+    if (!this.db) throw new Error('Database not initialized');
+
+    const result = this.db.exec(
+      'SELECT * FROM boomerang_tasks WHERE originalTaskId = ? ORDER BY sentAt DESC',
+      [originalTaskId]
+    );
+    if (result.length === 0) return [];
+
+    const tasks: any[] = [];
+    for (const row of result[0].values) {
+      tasks.push({
+        id: this.normalizeValue(row[0]),
+        originalTaskId: this.normalizeValue(row[1]),
+        targetAgent: this.normalizeValue(row[2]),
+        feedback: this.normalizeValue(row[3]),
+        priority: this.toNumber(row[4]) ?? 2,
+        status: this.normalizeValue(row[5]),
+        sentAt: this.toDate(row[6]) ?? new Date(),
+        returnedAt: this.toDate(row[7]),
+        result: this.toJson<any>(row[8], null),
+      });
+    }
+    return tasks;
+  }
+
+  async deleteBoomerangTask(taskId: string): Promise<void> {
+    if (!this.db) throw new Error('Database not initialized');
+    this.db.run('DELETE FROM boomerang_tasks WHERE id = ?', [taskId]);
     this.save();
   }
 
@@ -616,7 +905,7 @@ export class AgentStorage {
     for (const table of tables) {
       const result = this.db.exec(`SELECT COUNT(*) FROM ${table}`);
       if (result.length > 0) {
-        stats[table] = result[0].values[0][0];
+        stats[table] = this.toNumber(result[0].values[0][0]) ?? 0;
       }
     }
 
