@@ -1,0 +1,21 @@
+{
+  "name": "@mcp/vision-adapter-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "lint": "eslint src --ext .ts || echo \"lint skipped (eslint not configured)\""
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.21.1",
+    "axios": "^1.7.7",
+    "mime-types": "^2.1.35"
+  },
+  "devDependencies": {
+    "@types/mime-types": "^3.0.1",
+    "typescript": "^5.6.3"
+  }
+}

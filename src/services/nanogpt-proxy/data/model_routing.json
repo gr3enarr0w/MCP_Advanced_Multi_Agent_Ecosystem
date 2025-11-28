@@ -1,0 +1,102 @@
+{
+  "updated": "2025-01-15T00:00:00Z",
+  "roles": {
+    "architect": {
+      "primary": {
+        "model": "claude-3.5-sonnet",
+        "reason": "Top reasoning performance (91.9% GPQA Diamond)",
+        "benchmarks": {
+          "reasoning": 91.9,
+          "math": 85.7,
+          "coding": 92.0
+        }
+      },
+      "fallback": ["gemini-2.5-pro", "gpt-4o"],
+      "subscription_alternative": "qwen-2.5-72b"
+    },
+    "implementation": {
+      "primary": {
+        "model": "claude-3.5-sonnet",
+        "reason": "Best coding performance (92.0% HumanEval)",
+        "benchmarks": {
+          "coding": 92.0,
+          "reasoning": 91.9
+        }
+      },
+      "fallback": ["gpt-4o", "deepseek-coder-v2"],
+      "subscription_alternative": "qwen-2.5-coder-32b"
+    },
+    "code_review": {
+      "primary": {
+        "model": "claude-3-opus",
+        "reason": "Superior analysis and attention to detail",
+        "benchmarks": {
+          "reasoning": 90.5,
+          "coding": 88.0
+        }
+      },
+      "fallback": ["claude-3.5-sonnet", "gpt-4o"],
+      "subscription_alternative": "qwen-2.5-72b"
+    },
+    "debugging": {
+      "primary": {
+        "model": "gpt-4o",
+        "reason": "Strong logical reasoning and debugging capabilities",
+        "benchmarks": {
+          "reasoning": 88.5,
+          "coding": 90.2
+        }
+      },
+      "fallback": ["claude-3.5-sonnet", "gemini-2.0-flash"],
+      "subscription_alternative": "deepseek-chat"
+    },
+    "testing": {
+      "primary": {
+        "model": "claude-3.5-sonnet",
+        "reason": "Excellent edge case identification",
+        "benchmarks": {
+          "coding": 92.0,
+          "reasoning": 91.9
+        }
+      },
+      "fallback": ["gpt-4o", "gemini-2.0-flash"],
+      "subscription_alternative": "qwen-2.5-72b"
+    },
+    "documentation": {
+      "primary": {
+        "model": "gemini-2.0-flash",
+        "reason": "Fast, cost-effective, good language generation",
+        "benchmarks": {
+          "language": 85.0,
+          "speed": 95.0
+        }
+      },
+      "fallback": ["claude-3.5-sonnet", "gpt-4o-mini"],
+      "subscription_alternative": "gemini-2.0-flash"
+    },
+    "research": {
+      "primary": {
+        "model": "gemini-2.5-pro",
+        "reason": "Large context window (2M tokens) for comprehensive analysis",
+        "benchmarks": {
+          "reasoning": 89.0,
+          "context": 100.0
+        }
+      },
+      "fallback": ["claude-3.5-sonnet", "gpt-4o"],
+      "subscription_alternative": "qwen-2.5-72b"
+    },
+    "general": {
+      "primary": {
+        "model": "gemini-2.0-flash",
+        "reason": "Fast, versatile, cost-effective",
+        "benchmarks": {
+          "reasoning": 85.0,
+          "speed": 95.0
+        }
+      },
+      "fallback": ["claude-3.5-sonnet", "gpt-4o-mini"],
+      "subscription_alternative": "gemini-2.0-flash"
+    }
+  }
+}

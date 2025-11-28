@@ -1,0 +1,79 @@
+version: "3.9"
+
+services:
+  context-persistence:
+    build:
+      context: .
+      dockerfile: podman/context-persistence.Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ${HOME}/.mcp:/root/.mcp:Z
+    environment:
+      CONTEXT_DB: /root/.mcp/context/db/conversation.db
+      QDRANT_PATH: /root/.mcp/context/qdrant
+
+  task-orchestrator:
+    build:
+      context: .
+      dockerfile: podman/node-server.Dockerfile
+      args:
+        SERVER_DIR: src/mcp-servers/task-orchestrator
+    restart: unless-stopped
+    volumes:
+      - ${HOME}/.mcp:/root/.mcp:Z
+    command: ["node", "dist/index.js"]
+    environment:
+      TASKS_DB: /root/.mcp/tasks/tasks.db
+
+  search-aggregator:
+    build:
+      context: .
+      dockerfile: podman/node-server.Dockerfile
+      args:
+        SERVER_DIR: src/mcp-servers/search-aggregator
+    restart: unless-stopped
+    volumes:
+      - ${HOME}/.mcp:/root/.mcp:Z
+    command: ["node", "dist/index.js"]
+    environment:
+      PERPLEXITY_API_KEY: ""
+      BRAVE_API_KEY: ""
+      GOOGLE_API_KEY: ""
+      GOOGLE_CX: ""
+
+  agent-swarm:
+    build:
+      context: .
+      dockerfile: podman/node-server.Dockerfile
+      args:
+        SERVER_DIR: src/mcp-servers/agent-swarm
+    restart: unless-stopped
+    volumes:
+      - ${HOME}/.mcp:/root/.mcp:Z
+    command: ["node", "dist/index.js"]
+    environment:
+      AGENT_STORAGE: /root/.mcp/context/db/agent-swarm.db
+
+  skills-manager:
+    build:
+      context: .
+      dockerfile: podman/node-server.Dockerfile
+      args:
+        SERVER_DIR: src/mcp-servers/skills-manager
+    restart: unless-stopped
+    volumes:
+      - ${HOME}/.mcp:/root/.mcp:Z
+    command: ["node", "dist/index.js"]
+    environment:
+      SKILLS_DB_PATH: /root/.mcp/skills/skills.db
+
+  github-oauth:
+    build:
+      context: .
+      dockerfile: podman/github-oauth.Dockerfile
+    restart: unless-stopped
+    volumes:
+      - ${HOME}/.mcp:/root/.mcp:Z
+    command: ["node", "/srv/github-oauth/index.js"]
+    environment:
+      PORT: "4000"

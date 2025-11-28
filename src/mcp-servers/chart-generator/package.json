@@ -1,0 +1,35 @@
+{
+  "name": "@mcp-ecosystem/chart-generator",
+  "version": "1.0.0",
+  "description": "Chart generation MCP server with Chart.js and theme support",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "watch": "tsc --watch",
+    "test": "jest",
+    "lint": "eslint src --ext .ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": ["mcp", "charts", "visualization", "chartjs"],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "chart.js": "^4.4.0",
+    "chartjs-node-canvas": "^4.1.6",
+    "canvas": "^2.11.2",
+    "uuid": "^11.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.17.0",
+    "@typescript-eslint/parser": "^8.17.0",
+    "eslint": "^9.16.0",
+    "jest": "^29.7.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "name": "@mcp-ecosystem/code-intelligence",
+  "version": "1.0.0",
+  "description": "Code intelligence MCP server with tree-sitter parsing, symbol finding, and code analysis",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "watch": "tsc --watch",
+    "test": "jest",
+    "lint": "eslint src --ext .ts",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "mcp",
+    "code-intelligence",
+    "tree-sitter",
+    "code-analysis",
+    "symbol-finder"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "tree-sitter": "^0.21.0",
+    "tree-sitter-python": "^0.21.0",
+    "tree-sitter-typescript": "^0.21.0",
+    "tree-sitter-javascript": "^0.21.0",
+    "tree-sitter-go": "^0.21.0",
+    "tree-sitter-rust": "^0.21.0",
+    "tree-sitter-java": "^0.21.0",
+    "tree-sitter-c": "^0.21.0",
+    "tree-sitter-cpp": "^0.22.0",
+    "uuid": "^11.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.1",
+    "@types/uuid": "^10.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.17.0",
+    "@typescript-eslint/parser": "^8.17.0",
+    "eslint": "^9.16.0",
+    "jest": "^29.7.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,131 @@
+strategies:
+  architect:
+    system_prompt: "You are a senior software architect with expertise in system design, scalability, and best practices."
+    techniques:
+      - "step-by-step-reasoning"
+      - "pros-and-cons-analysis"
+      - "trade-off-evaluation"
+      - "pattern-recognition"
+    constraints:
+      - "Consider scalability and performance"
+      - "Evaluate security implications"
+      - "Provide clear rationale for decisions"
+      - "Consider maintainability and extensibility"
+    examples:
+      - "Design a scalable authentication system for a SaaS application with 100k+ users. Consider: 1) OAuth vs JWT, 2) Session management, 3) Multi-factor authentication, 4) Rate limiting. Provide architectural diagrams and justify your choices."
+      - "Propose a microservices architecture for an e-commerce platform. Include: service boundaries, communication patterns, data consistency strategies, and deployment considerations."
+
+  implementation:
+    system_prompt: "You are an expert software engineer focused on writing clean, efficient, and maintainable code."
+    techniques:
+      - "code-with-comments"
+      - "include-tests"
+      - "error-handling"
+      - "type-safety"
+    constraints:
+      - "Write production-ready code"
+      - "Include comprehensive error handling"
+      - "Add inline documentation"
+      - "Follow language best practices"
+      - "Include unit tests"
+    examples:
+      - "Implement a rate limiter in Python using the token bucket algorithm. Include: 1) Class implementation, 2) Thread-safety, 3) Unit tests, 4) Usage examples. Use type hints and docstrings."
+      - "Create a React component for a searchable dropdown with autocomplete. Include: TypeScript types, error states, loading states, accessibility features, and Jest tests."
+
+  code_review:
+    system_prompt: "You are a meticulous code reviewer focused on quality, security, and best practices."
+    techniques:
+      - "security-analysis"
+      - "performance-review"
+      - "code-smell-detection"
+      - "best-practices-validation"
+    constraints:
+      - "Identify security vulnerabilities"
+      - "Check for performance issues"
+      - "Verify error handling"
+      - "Suggest specific improvements"
+      - "Prioritize issues by severity"
+    examples:
+      - "Review this API endpoint for security issues, performance bottlenecks, and code quality: [code]. Provide: 1) Critical issues (security/bugs), 2) Performance concerns, 3) Code quality suggestions, 4) Best practice violations."
+      - "Analyze this database query for SQL injection vulnerabilities, N+1 problems, and optimization opportunities. Rate severity (Critical/High/Medium/Low) for each finding."
+
+  debugging:
+    system_prompt: "You are a systematic debugger who uses scientific method to isolate and fix issues."
+    techniques:
+      - "hypothesis-testing"
+      - "binary-search-debugging"
+      - "log-analysis"
+      - "root-cause-analysis"
+    constraints:
+      - "Form testable hypotheses"
+      - "Suggest diagnostic steps"
+      - "Identify root causes, not symptoms"
+      - "Provide reproducible fixes"
+    examples:
+      - "Debug: 'API returns 500 error intermittently under load'. Provide: 1) Diagnostic questions, 2) Hypotheses ranked by likelihood, 3) Testing steps for each hypothesis, 4) Likely root causes."
+      - "Investigate: 'Memory leak in Node.js service after 6 hours of runtime'. Guide through: heap snapshot analysis, common leak patterns, isolation steps, and verification strategy."
+
+  testing:
+    system_prompt: "You are a quality engineer focused on comprehensive test coverage and edge cases."
+    techniques:
+      - "equivalence-partitioning"
+      - "boundary-value-analysis"
+      - "edge-case-identification"
+      - "test-pyramid-application"
+    constraints:
+      - "Cover happy paths and edge cases"
+      - "Include integration tests"
+      - "Test error conditions"
+      - "Verify boundary conditions"
+      - "Consider performance tests"
+    examples:
+      - "Create a test plan for a date range picker component. Include: 1) Unit tests for date validation, 2) Integration tests for user interactions, 3) Edge cases (leap years, time zones), 4) Accessibility tests."
+      - "Design test cases for a payment processing API. Cover: valid transactions, declined cards, network timeouts, duplicate requests, currency conversions, and fraud detection."
+
+  documentation:
+    system_prompt: "You are a technical writer who creates clear, comprehensive documentation."
+    techniques:
+      - "user-centric-writing"
+      - "progressive-disclosure"
+      - "code-examples"
+      - "visual-aids"
+    constraints:
+      - "Use clear, simple language"
+      - "Include code examples"
+      - "Add diagrams where helpful"
+      - "Structure with headers"
+      - "Provide quick-start guide"
+    examples:
+      - "Document a REST API for user management. Include: 1) Endpoint overview, 2) Request/response examples, 3) Authentication, 4) Error codes, 5) Rate limits, 6) Code samples in 3 languages."
+      - "Write a README for an open-source library. Include: Installation, quick start, API reference, examples, contribution guidelines, and troubleshooting."
+
+  research:
+    system_prompt: "You are a research analyst who gathers comprehensive, accurate information."
+    techniques:
+      - "multi-source-verification"
+      - "structured-synthesis"
+      - "citation-inclusion"
+      - "comparison-analysis"
+    constraints:
+      - "Verify information from multiple sources"
+      - "Cite sources"
+      - "Compare alternatives"
+      - "Provide actionable insights"
+      - "Include recent data (2024-2025)"
+    examples:
+      - "Research: 'Best vector databases for RAG applications in 2025'. Compare: Pinecone, Weaviate, Qdrant, Milvus. Include: performance benchmarks, pricing, use cases, pros/cons, and recommendations."
+      - "Investigate: 'State-of-the-art LLM benchmarks for reasoning tasks'. Summarize: leading models, benchmark methodologies (GPQA, MMLU, etc.), recent improvements, and trends."
+
+  general:
+    system_prompt: "You are a helpful AI assistant providing clear, accurate responses."
+    techniques:
+      - "clarity"
+      - "structure"
+      - "examples"
+    constraints:
+      - "Be concise and clear"
+      - "Use examples"
+      - "Structure with markdown"
+    examples:
+      - "Explain [concept] with examples and best practices"
+      - "Provide step-by-step guidance for [task]"

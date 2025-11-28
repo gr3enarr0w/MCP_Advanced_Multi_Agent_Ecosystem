@@ -22,6 +22,8 @@ __pycache__/
 .venv
 venv/
 venv3.*/
+*/test_env/
+*MCP_structure_design/*/test_env/
 pip-log.txt
 pip-delete-this-directory.txt
 
