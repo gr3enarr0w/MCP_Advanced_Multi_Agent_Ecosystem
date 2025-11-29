@@ -70,8 +70,9 @@ func main() {
 	}
 
 	// Initialize Prompt Engineer (Phase 2)
+	var promptEngineer *promptengineer.PromptEngineer
 	if nanogptBackend != nil {
-		_, err = promptengineer.NewPromptEngineer(nanogptBackend, cfg.PromptStrategies)
+		promptEngineer, err = promptengineer.NewPromptEngineer(nanogptBackend, cfg.PromptStrategies)
 		if err != nil {
 			log.Printf("⚠ Failed to initialize prompt engineer: %v", err)
 		} else {
@@ -136,6 +137,7 @@ func main() {
 		vertexBackend,
 		cfg.ActiveProfile,
 		usageTracker,
+		promptEngineer,
 	)
 
 	modelsHandler := handlers.NewModelsHandler(

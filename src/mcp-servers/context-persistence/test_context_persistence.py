@@ -13,12 +13,8 @@ from pathlib import Path
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from context_persistence.server import (
-    mcp, save_conversation, search_similar_conversations, 
-    load_conversation_history, get_conversation_stats,
-    extract_entities, create_relationship, query_knowledge_graph,
-    search_hybrid, get_entity_history
-)
+import pytest
+from context_persistence.server import mcp
 
 async def test_server_initialization():
     """Test that the server initializes correctly"""
@@ -28,14 +24,18 @@ async def test_server_initialization():
     assert mcp is not None, "MCP server instance is None"
     print("  ✓ MCP server instance created")
     
-    # Check that tools are registered
-    tools = mcp.get_tools()
-    assert len(tools) > 0, "No tools registered in MCP server"
-    print(f"  ✓ {len(tools)} tools registered")
-    
-    # List all tool names
-    tool_names = [tool.name for tool in tools]
-    print(f"  ✓ Available tools: {', '.join(tool_names)}")
+    # Use FastMCP test client to verify tools
+    async with mcp.test_client() as client:
+        # Get available tools
+        tools_response = await client.list_tools()
+        tools = tools_response.tools
+        
+        assert len(tools) > 0, "No tools registered in MCP server"
+        print(f"  ✓ {len(tools)} tools registered")
+        
+        # List all tool names
+        tool_names = [tool.name for tool in tools]
+        print(f"  ✓ Available tools: {', '.join(tool_names)}")
     
     return True
 
@@ -49,17 +49,18 @@ async def test_save_conversation():
         {"role": "assistant", "content": "I'm doing well, thank you!"}
     ]
     
-    result = await save_conversation(
-        conversation_id=conversation_id,
-        messages=messages,
-        project_path="/test/project",
-        mode="test"
-    )
-    
-    assert result["conversation_id"] == conversation_id
-    assert result["message_count"] == 2
-    assert result["status"] == "saved"
-    print(f"  ✓ Conversation saved: {result}")
+    async with mcp.test_client() as client:
+        result = await client.call_tool("save_conversation", {
+            "conversation_id": conversation_id,
+            "messages": messages,
+            "project_path": "/test/project",
+            "mode": "test"
+        })
+        
+        assert result["conversation_id"] == conversation_id
+        assert result["message_count"] == 2
+        assert result["status"] == "saved"
+        print(f"  ✓ Conversation saved: {result}")
     
     return True
 

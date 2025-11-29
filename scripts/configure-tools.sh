@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MCP_HOME="$HOME/.mcp"
+GO_DIST="/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist"
 
 ROO_DIR="$HOME/Library/Application Support/Cursor/User/globalStorage/rooveterinaryinc.roo-cline/settings"
 ROO_CONFIG="$ROO_DIR/mcp_settings.json"
@@ -30,24 +31,23 @@ write_json() {
       }
     },
     "task-orchestrator": {
-      "command": "node",
-      "args": [
-        "$ROOT/src/mcp-servers/task-orchestrator/dist/index.js"
-      ],
+      "command": "$GO_DIST/task-orchestrator",
+      "args": [],
       "env": {
-        "TASKS_DB": "$MCP_HOME/tasks/tasks.db"
+        "MCP_DATABASE_DIR": "$MCP_HOME/tasks",
+        "MCP_LOG_LEVEL": "info"
       }
     },
     "search-aggregator": {
-      "command": "node",
-      "args": [
-        "$ROOT/src/mcp-servers/search-aggregator/dist/index.js"
-      ],
+      "command": "$GO_DIST/search-aggregator",
+      "args": [],
       "env": {
+        "MCP_DATABASE_DIR": "$MCP_HOME/cache",
+        "MCP_LOG_LEVEL": "info",
         "PERPLEXITY_API_KEY": "",
         "BRAVE_API_KEY": "",
         "GOOGLE_API_KEY": "",
-        "GOOGLE_CX": ""
+        "GOOGLE_CSE_ID": ""
       }
     },
     "agent-swarm": {
@@ -60,12 +60,11 @@ write_json() {
       }
     },
     "skills-manager": {
-      "command": "node",
-      "args": [
-        "$ROOT/src/mcp-servers/skills-manager/dist/index.js"
-      ],
+      "command": "$GO_DIST/skills-manager",
+      "args": [],
       "env": {
-        "SKILLS_DB_PATH": "$MCP_HOME/skills/skills.db"
+        "MCP_DATABASE_DIR": "$MCP_HOME/skills",
+        "MCP_LOG_LEVEL": "info"
       }
     },
     "github-oauth": {

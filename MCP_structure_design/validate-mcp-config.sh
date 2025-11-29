@@ -58,27 +58,27 @@ else
 fi
 
 # Check Task Orchestrator
-TASK_SERVER_PATH="mcp-servers/task-orchestrator/dist/index.js"
+TASK_SERVER_PATH="/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator"
 if [ -f "$TASK_SERVER_PATH" ]; then
     print_success "Task Orchestrator server file exists"
 else
-    print_warning "Task Orchestrator server file not found: $TASK_SERVER_PATH (run npm run build)"
+    print_warning "Task Orchestrator server file not found: $TASK_SERVER_PATH (run make build in mcp-servers-go)"
 fi
 
 # Check Search Aggregator
-SEARCH_SERVER_PATH="mcp-servers/search-aggregator/dist/index.js"
+SEARCH_SERVER_PATH="/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/search-aggregator"
 if [ -f "$SEARCH_SERVER_PATH" ]; then
     print_success "Search Aggregator server file exists"
 else
-    print_warning "Search Aggregator server file not found: $SEARCH_SERVER_PATH (run npm run build)"
+    print_warning "Search Aggregator server file not found: $SEARCH_SERVER_PATH (run make build in mcp-servers-go)"
 fi
 
 # Check Skills Manager
-SKILLS_SERVER_PATH="mcp-servers/skills-manager/dist/index.js"
+SKILLS_SERVER_PATH="/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/skills-manager"
 if [ -f "$SKILLS_SERVER_PATH" ]; then
     print_success "Skills Manager server file exists"
 else
-    print_warning "Skills Manager server file not found: $SKILLS_SERVER_PATH (run npm run build)"
+    print_warning "Skills Manager server file not found: $SKILLS_SERVER_PATH (run make build in mcp-servers-go)"
 fi
 
 # Check Agent Swarm

@@ -8,29 +8,33 @@ import (
 	"time"
 
 	"github.com/gr3enarr0w/mcp-ecosystem/nanogpt-proxy/backends"
+	"github.com/gr3enarr0w/mcp-ecosystem/nanogpt-proxy/promptengineer"
 	"github.com/gr3enarr0w/mcp-ecosystem/nanogpt-proxy/storage"
 )
 
 // ChatHandler handles chat completion requests
 type ChatHandler struct {
-	nanogptBackend *backends.NanoGPTBackend
-	vertexBackend  *backends.VertexBackend
+	nanogptBackend backends.Backend
+	vertexBackend  backends.Backend
 	activeProfile  string
 	usageTracker   *storage.UsageTracker
+	promptEngineer *promptengineer.PromptEngineer
 }
 
 // NewChatHandler creates a new chat handler
 func NewChatHandler(
-	nanogpt *backends.NanoGPTBackend,
-	vertex *backends.VertexBackend,
+	nanogpt backends.Backend,
+	vertex backends.Backend,
 	activeProfile string,
 	tracker *storage.UsageTracker,
+	engineer *promptengineer.PromptEngineer,
 ) *ChatHandler {
 	return &ChatHandler{
 		nanogptBackend: nanogpt,
 		vertexBackend:  vertex,
 		activeProfile:  activeProfile,
 		usageTracker:   tracker,
+		promptEngineer: engineer,
 	}
 }
 
@@ -43,6 +47,25 @@ func (h *ChatHandler) HandleChatCompletion(w http.ResponseWriter, r *http.Reques
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, fmt.Sprintf("Invalid request: %v", err), http.StatusBadRequest)
 		return
+	}
+
+	// Run prompt engineering when enabled and we have a role + user content
+	var optimized *promptengineer.OptimizedPrompt
+	if h.promptEngineer != nil && h.promptEngineer.IsEnabled() && req.Role != "" {
+		// Find latest user message to optimize
+		for i := len(req.Messages) - 1; i >= 0; i-- {
+			if req.Messages[i].Role == "user" {
+				result, err := h.promptEngineer.Optimize(r.Context(), req.Messages[i].Content, req.Role)
+				if err != nil {
+					log.Printf("[WARN] Prompt engineering failed (role=%s): %v", req.Role, err)
+					break
+				}
+				optimized = result
+				req.Messages[i].Content = result.Optimized
+				log.Printf("[INFO] Prompt optimized for role=%s using strategy=%s", req.Role, result.StrategyUsed)
+				break
+			}
+		}
 	}
 
 	// Select backend based on profile
@@ -63,6 +86,12 @@ func (h *ChatHandler) HandleChatCompletion(w http.ResponseWriter, r *http.Reques
 	resp.XProxyMetadata = &backends.ProxyMetadata{
 		Backend:       backend.Name(),
 		ModelSelected: resp.Model,
+	}
+	if optimized != nil {
+		resp.XProxyMetadata.OriginalPromptLength = len(optimized.Original)
+		resp.XProxyMetadata.OptimizedPromptLength = len(optimized.Optimized)
+		resp.XProxyMetadata.PromptEngineerTimeMs = optimized.OptimizationTime.Milliseconds()
+		resp.XProxyMetadata.StrategyUsed = optimized.StrategyUsed
 	}
 
 	// Track usage

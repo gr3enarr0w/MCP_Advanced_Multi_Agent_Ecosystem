@@ -7,7 +7,39 @@ import (
 	"time"
 
 	"github.com/ceverson/mcp-advanced-multi-agent-ecosystem/pkg/agent/swarm"
+	"github.com/ceverson/mcp-advanced-multi-agent-ecosystem/pkg/integrations/llm"
 )
+
+// mockLLMProvider implements llm.Provider for tests
+type mockLLMProvider struct{}
+
+func (m mockLLMProvider) Name() string { return "mock-llm" }
+func (m mockLLMProvider) GenerateResponse(ctx context.Context, prompt string, options *llm.GenerationOptions) (string, error) {
+	return "mock-response", nil
+}
+func (m mockLLMProvider) IsConfigured() bool { return true }
+func (m mockLLMProvider) HealthCheck(ctx context.Context) error { return nil }
+func (m mockLLMProvider) GetAvailableModels() []string { return []string{"mock-model"} }
+
+// waitForCompletion polls until workflow is completed or times out.
+func waitForCompletion(t *testing.T, engine *swarm.SPARCEngine, workflow *swarm.SPARCWorkflow) {
+	t.Helper()
+	ctx := context.Background()
+	timeout := time.After(15 * time.Second)
+	tick := time.Tick(500 * time.Millisecond)
+
+	for {
+		select {
+		case <-timeout:
+			t.Fatalf("workflow %s did not complete within timeout, status=%s", workflow.ID, workflow.Status)
+		case <-tick:
+			status := engine.GetWorkflowStatus(ctx, workflow)
+			if status.Status == swarm.SPARCStatusCompleted {
+				return
+			}
+		}
+	}
+}
 
 // TestSPARCWorkflowEndToEnd tests the complete SPARC workflow
 func TestSPARCWorkflowEndToEnd(t *testing.T) {
@@ -24,7 +56,7 @@ func TestSPARCWorkflowEndToEnd(t *testing.T) {
 		MaxIterations:          3,
 		AutoAdvance:            true,
 	}
-	sparcEngine := swarm.NewSPARCEngine(swarmManager, sparcConfig)
+	sparcEngine := swarm.NewSPARCEngine(swarmManager, sparcConfig, mockLLMProvider{})
 
 	// Test data
 	originalTaskID := "test-task-001"
@@ -83,7 +115,7 @@ func TestSPARCWorkflowExecution(t *testing.T) {
 		MaxIterations:          3,
 		AutoAdvance:            true,
 	}
-	sparcEngine := swarm.NewSPARCEngine(swarmManager, sparcConfig)
+	sparcEngine := swarm.NewSPARCEngine(swarmManager, sparcConfig, mockLLMProvider{})
 
 	// Create and start workflow
 	ctx := context.Background()
@@ -102,14 +134,7 @@ func TestSPARCWorkflowExecution(t *testing.T) {
 		t.Errorf("Expected status %s after start, got %s", swarm.SPARCStatusInProgress, workflow.Status)
 	}
 
-	// Wait for workflow to complete (simulated completion)
-	time.Sleep(3 * time.Second)
-
-	// Verify workflow completed
-	status := sparcEngine.GetWorkflowStatus(ctx, workflow)
-	if status.Status != swarm.SPARCStatusCompleted {
-		t.Errorf("Expected final status %s, got %s", swarm.SPARCStatusCompleted, status.Status)
-	}
+	waitForCompletion(t, sparcEngine, workflow)
 
 	// Verify all phases were executed
 	expectedPhases := []swarm.SPARCPhase{
@@ -157,7 +182,7 @@ func TestSPARCWorkflowAgentAssignments(t *testing.T) {
 		MaxIterations:          3,
 		AutoAdvance:            true,
 	}
-	sparcEngine := swarm.NewSPARCEngine(swarmManager, sparcConfig)
+	sparcEngine := swarm.NewSPARCEngine(swarmManager, sparcConfig, mockLLMProvider{})
 
 	// Create workflow
 	ctx := context.Background()
@@ -171,8 +196,7 @@ func TestSPARCWorkflowAgentAssignments(t *testing.T) {
 		t.Fatalf("Failed to start workflow: %v", err)
 	}
 
-	// Wait for completion
-	time.Sleep(3 * time.Second)
+	waitForCompletion(t, sparcEngine, workflow)
 
 	// Verify agent assignments for each phase
 	expectedAssignments := map[swarm.SPARCPhase]swarm.AgentType{
@@ -220,7 +244,7 @@ func TestSPARCWorkflowPhaseProgression(t *testing.T) {
 		MaxIterations:          3,
 		AutoAdvance:            true,
 	}
-	sparcEngine := swarm.NewSPARCEngine(swarmManager, sparcConfig)
+	sparcEngine := swarm.NewSPARCEngine(swarmManager, sparcConfig, mockLLMProvider{})
 
 	// Create and start workflow
 	ctx := context.Background()
@@ -234,16 +258,14 @@ func TestSPARCWorkflowPhaseProgression(t *testing.T) {
 		t.Fatalf("Failed to start workflow: %v", err)
 	}
 
-	// Wait and verify phase progression
-	time.Sleep(1 * time.Second)
-	
-	// Should have progressed from initial phase
-	if workflow.CurrentPhase == initialPhase && workflow.Status == swarm.SPARCStatusInProgress {
-		t.Error("Workflow should have progressed from initial phase")
+	// Wait for completion and ensure it progressed beyond initial phase
+	waitForCompletion(t, sparcEngine, workflow)
+	if workflow.CurrentPhase == initialPhase {
+		t.Errorf("Workflow should have progressed from initial phase (still %s)", workflow.CurrentPhase)
 	}
 
 	// Wait for completion
-	time.Sleep(3 * time.Second)
+	waitForCompletion(t, sparcEngine, workflow)
 
 	// Should be in completion phase or completed
 	if workflow.Status != swarm.SPARCStatusCompleted {
@@ -300,7 +322,7 @@ func TestSPARCWorkflowConfigurablePhases(t *testing.T) {
 				MaxIterations:          3,
 				AutoAdvance:            true,
 			}
-			sparcEngine := swarm.NewSPARCEngine(swarmManager, sparcConfig)
+			sparcEngine := swarm.NewSPARCEngine(swarmManager, sparcConfig, mockLLMProvider{})
 
 			// Create workflow
 			ctx := context.Background()
@@ -341,7 +363,7 @@ func TestSPARCWorkflowResultCompilation(t *testing.T) {
 		MaxIterations:          3,
 		AutoAdvance:            true,
 	}
-	sparcEngine := swarm.NewSPARCEngine(swarmManager, sparcConfig)
+	sparcEngine := swarm.NewSPARCEngine(swarmManager, sparcConfig, mockLLMProvider{})
 
 	// Create and execute workflow
 	ctx := context.Background()
@@ -354,8 +376,7 @@ func TestSPARCWorkflowResultCompilation(t *testing.T) {
 		t.Fatalf("Failed to start workflow: %v", err)
 	}
 
-	// Wait for completion
-	time.Sleep(3 * time.Second)
+	waitForCompletion(t, sparcEngine, workflow)
 
 	// Verify results from all phases
 	expectedPhases := []swarm.SPARCPhase{
@@ -405,7 +426,7 @@ func TestSPARCWorkflowErrorHandling(t *testing.T) {
 		MaxIterations:          3,
 		AutoAdvance:            true,
 	}
-	sparcEngine := swarm.NewSPARCEngine(swarmManager, sparcConfig)
+	sparcEngine := swarm.NewSPARCEngine(swarmManager, sparcConfig, mockLLMProvider{})
 
 	// Test invalid workflow start (already started)
 	ctx := context.Background()
@@ -443,7 +464,7 @@ func TestSPARCWorkflowStatusTracking(t *testing.T) {
 		MaxIterations:          3,
 		AutoAdvance:            true,
 	}
-	sparcEngine := swarm.NewSPARCEngine(swarmManager, sparcConfig)
+	sparcEngine := swarm.NewSPARCEngine(swarmManager, sparcConfig, mockLLMProvider{})
 
 	// Create workflow
 	ctx := context.Background()
@@ -469,8 +490,7 @@ func TestSPARCWorkflowStatusTracking(t *testing.T) {
 		t.Errorf("Expected in-progress status %s, got %s", swarm.SPARCStatusInProgress, status.Status)
 	}
 
-	// Wait for completion
-	time.Sleep(3 * time.Second)
+	waitForCompletion(t, sparcEngine, workflow)
 
 	// Check final status
 	status = sparcEngine.GetWorkflowStatus(ctx, workflow)

@@ -10,16 +10,13 @@ Results are ranked and fused for optimal relevance.
 """
 
 from datetime import datetime
-from typing import List, Dict, Any, Optional, TYPE_CHECKING
+from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession
 from qdrant_client import QdrantClient
-from .models_enhanced import Entity, Relationship, SearchIndex
+from .models_enhanced import Entity, Relationship, SearchIndex, Message
 from .knowledge_graph import KnowledgeGraph
-
-if TYPE_CHECKING:
-    from .server import Message
 
 
 @dataclass

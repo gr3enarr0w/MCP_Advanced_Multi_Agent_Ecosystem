@@ -26,51 +26,24 @@ print_info() {
 # Change to project root
 cd /Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design
 
-# Step 1: Install Task Orchestrator dependencies
-print_info "Installing Task Orchestrator dependencies..."
-cd mcp-servers/task-orchestrator
-npm install
+# Step 1: Build Go servers (task-orchestrator, search-aggregator, skills-manager)
+print_info "Building Go MCP servers..."
+cd mcp-servers-go
+make build
 if [ $? -eq 0 ]; then
-    print_success "Task Orchestrator dependencies installed"
+    print_success "Go MCP servers built successfully"
 else
-    print_error "Failed to install Task Orchestrator dependencies"
+    print_error "Failed to build Go MCP servers"
     exit 1
 fi
 
-# Step 2: Build Task Orchestrator
-print_info "Building Task Orchestrator..."
-npm run build
-if [ $? -eq 0 ]; then
-    print_success "Task Orchestrator built successfully"
-else
-    print_error "Failed to build Task Orchestrator"
-    exit 1
-fi
-
-# Step 3: Install Search Aggregator dependencies
-print_info "Installing Search Aggregator dependencies..."
-cd ../search-aggregator
-npm install
-if [ $? -eq 0 ]; then
-    print_success "Search Aggregator dependencies installed"
-else
-    print_error "Failed to install Search Aggregator dependencies"
-    exit 1
-fi
-
-# Step 4: Build Search Aggregator
-print_info "Building Search Aggregator..."
-npm run build
-if [ $? -eq 0 ]; then
-    print_success "Search Aggregator built successfully"
-else
-    print_error "Failed to build Search Aggregator"
-    exit 1
-fi
+# Step 2: (Legacy) Search Aggregator TypeScript build skipped in favor of Go binaries
+print_info "Skipping legacy TypeScript Search Aggregator build (Go binaries are primary)"
+cd ..
 
 # Step 5: Install Python dependencies
 print_info "Installing Python dependencies for Context Persistence..."
-cd ../context-persistence
+cd mcp-servers/context-persistence
 pip3 install mcp qdrant-client sqlalchemy sentence-transformers tiktoken aiosqlite 2>&1 | tail -10
 if [ $? -eq 0 ]; then
     print_success "Python dependencies installed"
@@ -85,13 +58,13 @@ echo "=== Verifying Installations ==="
 cd /Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design
 
 # Check TypeScript builds
-if [ -f "mcp-servers/task-orchestrator/dist/index.js" ]; then
+if [ -f "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator" ]; then
     print_success "Task Orchestrator build verified"
 else
     print_error "Task Orchestrator build missing"
 fi
 
-if [ -f "mcp-servers/search-aggregator/dist/index.js" ]; then
+if [ -f "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/search-aggregator" ]; then
     print_success "Search Aggregator build verified"
 else
     print_error "Search Aggregator build missing"
@@ -114,13 +87,13 @@ echo "  1. Context Persistence (Python)"
 echo "     Location: mcp-servers/context-persistence/"
 echo "     Test: python3 -m context_persistence.server"
 echo ""
-echo "  2. Task Orchestrator (TypeScript)"
-echo "     Location: mcp-servers/task-orchestrator/dist/index.js"
-echo "     Test: node mcp-servers/task-orchestrator/dist/index.js"
+echo "  2. Task Orchestrator (Go binary)"
+echo "     Location: /Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator"
+echo "     Test: /Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator"
 echo ""
-echo "  3. Search Aggregator (TypeScript)"
-echo "     Location: mcp-servers/search-aggregator/dist/index.js"
-echo "     Test: node mcp-servers/search-aggregator/dist/index.js"
+echo "  3. Search Aggregator (Go binary)"
+echo "     Location: /Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/search-aggregator"
+echo "     Test: /Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/search-aggregator"
 echo ""
 echo "Storage locations:"
 echo "  ~/.mcp/context/      - Conversation history & vectors"

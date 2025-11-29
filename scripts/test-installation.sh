@@ -29,9 +29,15 @@ importlib.import_module("context_persistence.server")
 print("Context persistence import succeeded")
 PY
 
-services=(task-orchestrator search-aggregator agent-swarm skills-manager)
-for service in "${services[@]}"; do
-  dist="$ROOT/src/mcp-servers/$service/dist/index.js"
+artifacts=(
+  "task-orchestrator:$ROOT/MCP_structure_design/mcp-servers-go/dist/task-orchestrator"
+  "search-aggregator:$ROOT/MCP_structure_design/mcp-servers-go/dist/search-aggregator"
+  "skills-manager:$ROOT/MCP_structure_design/mcp-servers-go/dist/skills-manager"
+  "agent-swarm:$ROOT/src/mcp-servers/agent-swarm/dist/index.js"
+)
+
+for entry in "${artifacts[@]}"; do
+  IFS=":" read -r service dist <<< "$entry"
   if [[ -f "$dist" ]]; then
     info "Dist file found for $service ($dist)"
   else

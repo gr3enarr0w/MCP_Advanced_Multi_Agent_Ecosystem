@@ -1,45 +1,80 @@
 {
   "mcpServers": {
     "context-persistence": {
-      "command": "uv",
-      "args": [
-        "run",
-        "--directory",
-        "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers/context-persistence",
-        "python",
-        "-m",
-        "context_persistence.server"
-      ],
+      "command": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/src/mcp-servers/context-persistence/venv3.12/bin/python3",
+      "args": ["-m", "context_persistence.server"],
       "env": {
-        "PYTHONUNBUFFERED": "1",
-        "PYTHONPATH": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers/context-persistence/src",
+        "PYTHONPATH": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/src/mcp-servers/context-persistence/src",
         "CONTEXT_DB": "/Users/ceverson/.mcp/context/db/conversation.db",
         "QDRANT_PATH": "/Users/ceverson/.mcp/context/qdrant"
-      }
+      },
+      "alwaysAllow": ["get_conversation_stats"]
     },
     "task-orchestrator": {
-      "command": "node",
-      "args": ["/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers/task-orchestrator/dist/index.js"],
+      "command": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator",
+      "args": [],
       "env": {
-        "TASKS_DB": "/Users/ceverson/.mcp/tasks/tasks.db"
-      }
+        "MCP_DATABASE_DIR": "/Users/ceverson/.mcp/tasks",
+        "MCP_LOG_LEVEL": "info"
+      },
+      "alwaysAllow": ["list_tasks", "create_task", "update_task_status", "get_task", "execute_code"]
     },
     "search-aggregator": {
-      "command": "node",
-      "args": ["/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers/search-aggregator/dist/index.js"],
+      "command": "bash",
+      "args": [
+        "-lc",
+        "set -a; source /Users/ceverson/.mcp/roo-mcp.env; exec /Users/ceverson/MCP_structure_design/mcp-servers-go/dist/search-aggregator"
+      ],
       "env": {
-        "PERPLEXITY_API_KEY": "",
-        "BRAVE_API_KEY": "",
-        "GOOGLE_API_KEY": "",
-        "GOOGLE_CX": ""
-      }
+        "MCP_DATABASE_DIR": "/Users/ceverson/.mcp/cache",
+        "MCP_LOG_LEVEL": "info"
+      },
+      "alwaysAllow": ["get_available_providers", "search", "clear_search_cache"]
     },
     "skills-manager": {
-      "command": "node",
-      "args": ["/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers/skills-manager/dist/index.js"],
+      "command": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/skills-manager",
+      "args": [],
       "env": {
-        "SKILLS_DB_PATH": "/Users/ceverson/.mcp/skills/skills.db"
+        "MCP_DATABASE_DIR": "/Users/ceverson/.mcp/skills",
+        "MCP_LOG_LEVEL": "info"
+      },
+      "alwaysAllow": ["add_skill", "list_skills", "create_learning_goal", "analyze_skill_gaps", "get_skill_stats"]
+    },
+    "git": {
+      "command": "bash",
+      "args": [
+        "-lc",
+        "set -a; source /Users/ceverson/.mcp/roo-mcp.env; exec npx -y @modelcontextprotocol/server-github"
+      ],
+      "alwaysAllow": [
+        "search_repositories",
+        "create_issue",
+        "add_issue_comment",
+        "list_issues",
+        "update_issue",
+        "create_pull_request",
+        "get_pull_request",
+        "list_pull_requests",
+        "merge_pull_request"
+      ]
+    },
+    "agent-swarm": {
+      "command": "node",
+      "args": ["/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/src/mcp-servers/agent-swarm/dist/index.js"],
+      "env": {
+        "AGENT_STORAGE": "/Users/ceverson/.mcp/agents/agent-swarm.db"
       }
+    },
+    "github-oauth": {
+      "command": "node",
+      "args": ["/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/src/mcp-servers/github-oauth/index.js"],
+      "env": {
+        "PORT": "4000"
+      }
+    },
+    "chart-generator": {
+      "command": "node",
+      "args": ["/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/src/mcp-servers/chart-generator/dist/index.js"]
     }
   }
 }

@@ -14,6 +14,7 @@ from typing import Any, Optional
 from uuid import uuid4
 from datetime import datetime
 import json
+from contextlib import asynccontextmanager
 
 from mcp.server.fastmcp import FastMCP, Context
 from mcp.server.session import ServerSession
@@ -107,38 +108,8 @@ def sanitize_qdrant_metadata(meta_path: Path) -> None:
 # SQLAlchemy setup
 Base = declarative_base()
 
-class Conversation(Base):
-    __tablename__ = "conversations"
-    
-    id = sa.Column(sa.String, primary_key=True)
-    started_at = sa.Column(sa.DateTime, default=datetime.utcnow)
-    project_path = sa.Column(sa.String, nullable=True)
-    mode = sa.Column(sa.String, nullable=True)
-    meta_data = sa.Column(sa.JSON, default=dict)
-
-class Message(Base):
-    __tablename__ = "messages"
-    
-    id = sa.Column(sa.Integer, primary_key=True, autoincrement=True)
-    conversation_id = sa.Column(sa.String, sa.ForeignKey("conversations.id"))
-    timestamp = sa.Column(sa.DateTime, default=datetime.utcnow)
-    role = sa.Column(sa.String)  # user, assistant, system
-    content = sa.Column(sa.Text)
-    tokens = sa.Column(sa.Integer, nullable=True)
-    embedding_id = sa.Column(sa.String, nullable=True)  # References Qdrant point
-
-class Decision(Base):
-    __tablename__ = "decisions"
-    
-    id = sa.Column(sa.Integer, primary_key=True, autoincrement=True)
-    conversation_id = sa.Column(sa.String, sa.ForeignKey("conversations.id"))
-    timestamp = sa.Column(sa.DateTime, default=datetime.utcnow)
-    decision_type = sa.Column(sa.String)
-    context = sa.Column(sa.Text)
-    outcome = sa.Column(sa.Text)
-
-# Initialize FastMCP server
-mcp = FastMCP("Context Persistence")
+# Import models from models_enhanced to avoid circular imports
+from .models_enhanced import Conversation, Message, Decision, Entity, Relationship, EntityMention
 
 # Global instances (initialized in lifespan)
 db_engine = None
@@ -151,6 +122,28 @@ tokenizer = None
 entity_extractor = None
 knowledge_graph = None
 hybrid_search = None
+
+@asynccontextmanager
+async def server_lifespan(app: FastMCP):
+    """Proper async initialization with error handling"""
+    global db_engine, async_session, qdrant_client, embedding_model, tokenizer
+    global entity_extractor, knowledge_graph, hybrid_search
+
+    try:
+        await init_database()
+        await init_qdrant()
+        await init_models()
+        print("✅ Context Persistence server initialized")
+        yield
+    except Exception as e:
+        print(f"❌ Server initialization failed: {e}")
+        raise
+    finally:
+        if db_engine:
+            await db_engine.dispose()
+
+# Initialize FastMCP server with lifespan parameter
+mcp = FastMCP("Context Persistence", lifespan=server_lifespan)
 
 class _SimpleTokenizer:
     """Fallback tokenizer that splits on whitespace and characters."""
@@ -248,16 +241,6 @@ async def init_models():
     entity_extractor = EntityExtractor()
     knowledge_graph = KnowledgeGraph()
     hybrid_search = HybridSearch(qdrant_client, embedding_model, knowledge_graph)
-
-# Initialize on import for simplicity
-import asyncio
-try:
-    asyncio.run(init_database())
-    asyncio.run(init_qdrant())
-    asyncio.run(init_models())
-    print("✅ Context Persistence server initialized")
-except Exception as e:
-    print(f"⚠️  Context Persistence server initialization failed: {e}")
 
 def count_tokens(text: str) -> int:
     """Count tokens in text"""

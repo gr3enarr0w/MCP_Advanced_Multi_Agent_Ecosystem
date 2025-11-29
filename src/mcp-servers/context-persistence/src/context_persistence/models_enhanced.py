@@ -15,6 +15,43 @@ Base = declarative_base()
 
 
 # ============================================================================
+# Core Models - Moved from server.py to resolve circular imports
+# ============================================================================
+
+class Conversation(Base):
+    __tablename__ = "conversations"
+    
+    id = sa.Column(sa.String, primary_key=True)
+    started_at = sa.Column(sa.DateTime, default=datetime.utcnow)
+    project_path = sa.Column(sa.String, nullable=True)
+    mode = sa.Column(sa.String, nullable=True)
+    meta_data = sa.Column(sa.JSON, default=dict)
+
+
+class Message(Base):
+    __tablename__ = "messages"
+    
+    id = sa.Column(sa.Integer, primary_key=True, autoincrement=True)
+    conversation_id = sa.Column(sa.String, sa.ForeignKey("conversations.id"))
+    timestamp = sa.Column(sa.DateTime, default=datetime.utcnow)
+    role = sa.Column(sa.String)  # user, assistant, system
+    content = sa.Column(sa.Text)
+    tokens = sa.Column(sa.Integer, nullable=True)
+    embedding_id = sa.Column(sa.String, nullable=True)  # References Qdrant point
+
+
+class Decision(Base):
+    __tablename__ = "decisions"
+    
+    id = sa.Column(sa.Integer, primary_key=True, autoincrement=True)
+    conversation_id = sa.Column(sa.String, sa.ForeignKey("conversations.id"))
+    timestamp = sa.Column(sa.DateTime, default=datetime.utcnow)
+    decision_type = sa.Column(sa.String)
+    context = sa.Column(sa.Text)
+    outcome = sa.Column(sa.Text)
+
+
+# ============================================================================
 # Bi-Temporal Schema - Tracks both when events occurred and when we learned about them
 # ============================================================================
 

@@ -107,10 +107,11 @@ print_info "Testing Context Persistence..."
 timeout 2s python3 -m context_persistence.server 2>&1 | head -5 || print_success "Context Persistence server starts"
 
 print_info "Testing Task Orchestrator..."
-timeout 2s node ../../mcp-servers/task-orchestrator/dist/index.js 2>&1 | head -5 || print_success "Task Orchestrator server starts"
+GO_DIST="/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist"
+timeout 2s "$GO_DIST/task-orchestrator" 2>&1 | head -5 || print_success "Task Orchestrator server starts"
 
 print_info "Testing Search Aggregator..."
-timeout 2s node ../../mcp-servers/search-aggregator/dist/index.js 2>&1 | head -5 || print_success "Search Aggregator server starts"
+timeout 2s "$GO_DIST/search-aggregator" 2>&1 | head -5 || print_success "Search Aggregator server starts"
 
 echo ""
 echo "======================================"
