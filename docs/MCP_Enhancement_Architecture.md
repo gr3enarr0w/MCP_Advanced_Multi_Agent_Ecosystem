@@ -655,8 +655,12 @@ class Agent:
       }
     },
     "task-orchestrator": {
-      "command": "node",
-      "args": ["/Users/ceverson/mcp-servers/task-orchestrator/dist/index.js"]
+      "command": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator",
+      "args": [],
+      "env": {
+        "MCP_DATABASE_DIR": "/Users/ceverson/.mcp/tasks",
+        "MCP_LOG_LEVEL": "info"
+      }
     },
     "code-intelligence": {
       "command": "python",
@@ -704,8 +708,12 @@ class Agent:
       "args": ["-m", "mcp_servers.agent_swarm"]
     },
     "task-orchestrator": {
-      "command": "node",
-      "args": ["/Users/ceverson/mcp-servers/task-orchestrator/dist/index.js"]
+      "command": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator",
+      "args": [],
+      "env": {
+        "MCP_DATABASE_DIR": "/Users/ceverson/.mcp/tasks",
+        "MCP_LOG_LEVEL": "info"
+      }
     },
     "context-persistence": {
       "command": "python",

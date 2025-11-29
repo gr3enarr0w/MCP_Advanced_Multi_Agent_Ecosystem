@@ -193,6 +193,13 @@ Agents use keyword-based routing for intelligent task distribution:
 # Install dependencies for all servers
 ./scripts/install-mcp-servers.sh
 
+# Unified MCP stdio e2e (temp MCP_HOME, seeds DB/cache)
+# Go only / TS only / Python only / all servers
+node tests/mcp-e2e/run-mcp-e2e-all.js go
+node tests/mcp-e2e/run-mcp-e2e-all.js ts
+node tests/mcp-e2e/run-mcp-e2e-all.js python
+node tests/mcp-e2e/run-mcp-e2e-all.js all
+
 # Run tests
 npm test
 
@@ -201,6 +208,8 @@ npm run test:unit
 npm run test:integration
 npm run test:performance
 ```
+
+E2E harness details and coverage: `docs/MCP_E2E_TESTING.md` (temp MCP_HOME, seeded task DB schema/defaults, cached search for offline runs).
 
 ### Adding New MCP Servers
 

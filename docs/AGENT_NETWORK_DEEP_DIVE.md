@@ -3,6 +3,8 @@
 ## Purpose & Scope
 This repository bundles a local-first, multi-agent MCP ecosystem so Roo Code (and other MCP clients like Cursor, Claude Code, Codex) can drive complex workflows without cloud dependencies. The `MCP_structure_design/MCP_Advanced_Multi_Agent_Ecosystem/README.md` catalogues 6+ MCP servers, 55+ tools, and the advanced orchestration layers that keep specialists (architect, code, testing, research) coordinated while respecting clear module boundaries.
 
+> NOTE: Operational servers for task-orchestrator, search-aggregator, and skills-manager now live in `MCP_structure_design/mcp-servers-go/dist`. Paths below pointing to `src/mcp-servers/*` describe the legacy TypeScript implementations kept for reference.
+
 ## Agent Network Components
 - **Context Persistence Server** (`src/mcp-servers/context-persistence`): Python-based, stores conversations in SQLite, embeddings in Qdrant, and exposes helper tools (`save_conversation`, `search_similar_conversations`, etc.) trusted by every agent that needs memory.
 - **Task Orchestrator Server** (`src/mcp-servers/task-orchestrator`): TypeScript/Node server with sql.js-backed SQLite, dependency graphs (graphology), Git commit linking, and tools such as `create_task` / `get_task_graph` that coordinate what each Roo action should run.

@@ -22,22 +22,25 @@ Add the official GitHub MCP server to your Roo configuration:
       "command": "python3",
       "args": ["-m", "context_persistence.server"],
       "env": {
-        "PYTHONPATH": "/Users/ceverson/mcp-servers/context-persistence/src",
+        "PYTHONPATH": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers/context-persistence/src",
         "CONTEXT_DB": "/Users/ceverson/.mcp/context/db/conversation.db",
         "QDRANT_PATH": "/Users/ceverson/.mcp/context/qdrant"
       }
     },
     "task-orchestrator": {
-      "command": "node",
-      "args": ["/Users/ceverson/mcp-servers/task-orchestrator/dist/index.js"],
+      "command": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator",
+      "args": [],
       "env": {
-        "TASKS_DB": "/Users/ceverson/.mcp/tasks/tasks.db"
+        "MCP_DATABASE_DIR": "/Users/ceverson/.mcp/tasks",
+        "MCP_LOG_LEVEL": "info"
       }
     },
     "search-aggregator": {
-      "command": "node",
-      "args": ["/Users/ceverson/mcp-servers/search-aggregator/dist/index.js"],
+      "command": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/search-aggregator",
+      "args": [],
       "env": {
+        "MCP_DATABASE_DIR": "/Users/ceverson/.mcp/cache",
+        "MCP_LOG_LEVEL": "info",
         "PERPLEXITY_API_KEY": "${PERPLEXITY_API_KEY}",
         "BRAVE_API_KEY": "",
         "GOOGLE_API_KEY": "",

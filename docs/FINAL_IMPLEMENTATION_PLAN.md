@@ -4,6 +4,8 @@
 
 All data storage must be on your local machine. No cloud services for core functionality.
 
+> NOTE: Primary runtime targets are the Go binaries in `MCP_structure_design/mcp-servers-go/dist` (task-orchestrator, search-aggregator, skills-manager). TypeScript references to `mcp-servers/*` remain for legacy context only.
+
 ## Component Decisions
 
 ### 1. Context Persistence ✅ BUILD CUSTOM
@@ -226,16 +228,19 @@ mcp-servers/search-aggregator/
       }
     },
     "task-orchestrator": {
-      "command": "node",
-      "args": ["/Users/ceverson/MCP_structure_design/mcp-servers/task-orchestrator/dist/index.js"],
+      "command": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator",
+      "args": [],
       "env": {
-        "TASKS_DB": "/Users/ceverson/.mcp/tasks/tasks.db"
+        "MCP_DATABASE_DIR": "/Users/ceverson/.mcp/tasks",
+        "MCP_LOG_LEVEL": "info"
       }
     },
     "search-aggregator": {
-      "command": "node",
-      "args": ["/Users/ceverson/MCP_structure_design/mcp-servers/search-aggregator/dist/index.js"],
+      "command": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/search-aggregator",
+      "args": [],
       "env": {
+        "MCP_DATABASE_DIR": "/Users/ceverson/.mcp/cache",
+        "MCP_LOG_LEVEL": "info",
         "PERPLEXITY_API_KEY": "${PERPLEXITY_API_KEY}",
         "BRAVE_API_KEY": "${BRAVE_API_KEY}",
         "CACHE_DIR": "/Users/ceverson/.mcp/cache/search"
@@ -264,12 +269,12 @@ mcp-servers/search-aggregator/
       "args": ["-m", "mcp_servers.context_persistence"]
     },
     "task-orchestrator": {
-      "command": "node",
-      "args": ["/Users/ceverson/MCP_structure_design/mcp-servers/task-orchestrator/dist/index.js"]
+      "command": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator",
+      "args": []
     },
     "search-aggregator": {
-      "command": "node",
-      "args": ["/Users/ceverson/MCP_structure_design/mcp-servers/search-aggregator/dist/index.js"]
+      "command": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/search-aggregator",
+      "args": []
     },
     "brave-search": {
       "command": "npx",
@@ -328,10 +333,10 @@ npm run build
 python3 -m mcp_servers.context_persistence
 
 # Test Task Orchestrator
-node mcp-servers/task-orchestrator/dist/index.js
+/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator
 
 # Test Search Aggregator
-node mcp-servers/search-aggregator/dist/index.js
+/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/search-aggregator
 ```
 
 ## Success Criteria

@@ -4,6 +4,8 @@
 
 This document provides the current testing status of all 7 MCP servers in the ecosystem. **6 out of 7 TypeScript servers violate architecture requirements** and lack proper testing setup.
 
+> NOTE: Task-orchestrator, search-aggregator, and skills-manager now run as Go binaries in `MCP_structure_design/mcp-servers-go/dist`. The TypeScript testing gaps described below are historical references retained for context.
+
 ## Critical Issues Summary
 
 ### 🚨 Critical Infrastructure Issues

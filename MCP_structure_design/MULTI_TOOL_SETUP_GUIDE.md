@@ -288,8 +288,8 @@ profiles:
       }
     },
     "task-orchestrator": {
-      "command": "node",
-      "args": ["/Users/ceverson/mcp-servers/task-orchestrator/dist/index.js"],
+      "command": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator",
+      "args": [],
       "env": {
         "MCP_TASKS_DB": "${MCP_TASKS_DB}"
       }
@@ -338,8 +338,8 @@ profiles:
       }
     },
     "task-orchestrator": {
-      "command": "node",
-      "args": ["/Users/ceverson/mcp-servers/task-orchestrator/dist/index.js"]
+      "command": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator",
+      "args": []
     },
     "code-intelligence": {
       "command": "python3",
@@ -391,8 +391,8 @@ profiles:
       }
     },
     "task-orchestrator": {
-      "command": "node",
-      "args": ["/Users/ceverson/mcp-servers/task-orchestrator/dist/index.js"]
+      "command": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator",
+      "args": []
     },
     "research-hub": {
       "command": "node",
@@ -414,8 +414,8 @@ profiles:
       "args": ["-m", "mcp_servers.context_persistence"]
     },
     "task-orchestrator": {
-      "command": "node",
-      "args": ["/Users/ceverson/mcp-servers/task-orchestrator/dist/index.js"]
+      "command": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator",
+      "args": []
     },
     "code-intelligence": {
       "command": "python3",
@@ -523,7 +523,7 @@ print_status "Installed Python dependencies"
 echo ""
 echo "Installing Node.js dependencies..."
 
-cd ~/mcp-servers/task-orchestrator
+cd ~/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go  # Go servers (preferred)
 if [ ! -f "package.json" ]; then
     npm init -y
     npm install @modelcontextprotocol/sdk simple-git graphology sqlite3
@@ -769,7 +769,7 @@ fi
 
 echo ""
 echo "Checking Node.js dependencies..."
-cd ~/mcp-servers/task-orchestrator
+cd ~/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go  # Go servers (preferred)
 if [ -f "package.json" ]; then
     check_pass "task-orchestrator package.json exists"
     [ -d "node_modules" ] && check_pass "task-orchestrator dependencies installed" || check_warn "task-orchestrator dependencies not installed"

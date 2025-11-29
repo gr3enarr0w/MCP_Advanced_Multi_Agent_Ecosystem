@@ -10,7 +10,7 @@
 
 ### 1. Task Orchestrator (5 Tools)
 
-**Server**: `mcp-servers-go/dist/task-orchestrator` (Go)
+**Server**: `/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator` (Go)
 
 | Tool | Description | Parameters | Returns |
 |------|-------------|------------|---------|
@@ -30,7 +30,7 @@
 
 ### 2. Search Aggregator (3 Tools)
 
-**Server**: `mcp-servers-go/dist/search-aggregator` (Go)
+**Server**: `/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/search-aggregator` (Go)
 
 | Tool | Description | Parameters | Returns |
 |------|-------------|------------|---------|
@@ -53,7 +53,7 @@
 
 ### 3. Skills Manager (4 Tools)
 
-**Server**: `mcp-servers-go/dist/skills-manager` (Go)
+**Server**: `/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/skills-manager` (Go)
 
 | Tool | Description | Parameters | Returns |
 |------|-------------|------------|---------|

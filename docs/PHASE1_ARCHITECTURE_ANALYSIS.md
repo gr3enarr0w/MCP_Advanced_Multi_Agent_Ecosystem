@@ -4,6 +4,8 @@
 
 This document provides the architecture analysis and design for Phase 1 of the MCP Server Ecosystem Optimization project. The analysis determines what functionality from legacy servers should be embedded into the Task Orchestrator and presents the enhanced architecture design.
 
+> NOTE: The production implementation now lives in `MCP_structure_design/mcp-servers-go` with binaries in `dist/` (task-orchestrator, search-aggregator, skills-manager). References to `mcp-servers/*` below describe the legacy TypeScript baseline and are kept for historical context only.
+
 ## Current State Analysis
 
 ### Existing Server Structure Analysis

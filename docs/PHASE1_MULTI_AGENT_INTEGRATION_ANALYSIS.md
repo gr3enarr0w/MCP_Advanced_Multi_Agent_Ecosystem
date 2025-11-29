@@ -310,7 +310,7 @@ interface ConflictResolver {
     },
     "task-orchestrator": {
       "command": "node",
-      "args": ["/Users/ceverson/mcp-servers/task-orchestrator/dist/index.js"],
+      "args": ["/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator"],
       "env": {
         "ENABLE_AGENT_COORDINATION": "true"
       }

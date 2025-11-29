@@ -4,6 +4,8 @@
 
 This document provides a comprehensive architecture for integrating OpenSkills (https://github.com/numman-ali/openskills) and SkillsMP (https://skillsmp.com/categories) into the existing MCP server ecosystem. The Skills Management MCP server will provide local-first skill tracking, learning path management, and intelligent skill-task correlation.
 
+> NOTE: The active deployment target for skills-manager is the Go binary in `MCP_structure_design/mcp-servers-go/dist/skills-manager`. Legacy TypeScript path references are retained for historical context.
+
 ## Table of Contents
 
 1. [Overview](#overview)
@@ -1702,7 +1704,7 @@ SKILLS_LOG_LEVEL=info
   "mcpServers": {
     "skills-manager": {
       "command": "node",
-      "args": ["/Users/ceverson/MCP_structure_design/mcp-servers/skills-manager/dist/index.js"],
+      "args": ["/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/skills-manager"],
       "env": {
         "SKILLS_DB_PATH": "/Users/ceverson/.mcp/skills/skills.db",
         "SKILLS_CACHE_DIR": "/Users/ceverson/.mcp/skills/cache",

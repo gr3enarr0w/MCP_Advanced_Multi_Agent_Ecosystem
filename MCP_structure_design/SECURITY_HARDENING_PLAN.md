@@ -3,6 +3,8 @@
 ## Overview
 This plan addresses the Shai-Hulud npm malware threat and secures our MCP ecosystem against supply chain attacks while preserving our working TypeScript implementation.
 
+> NOTE: The preferred runtime servers are now the Go binaries in `MCP_structure_design/mcp-servers-go/dist` for task-orchestrator, search-aggregator, and skills-manager. The TypeScript package references below are legacy hardening notes kept for completeness.
+
 ## Timeline: 3-5 days
 
 ## Phase 1: Immediate Dependency Lockdown (Day 1)

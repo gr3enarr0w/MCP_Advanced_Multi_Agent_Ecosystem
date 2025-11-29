@@ -27,6 +27,14 @@ venv3.*/
 pip-log.txt
 pip-delete-this-directory.txt
 
+# Local MCP artifacts
+.mcp-local/
+*.db
+.gocache/
+.coverage
+htmlcov/
+.pytest_cache/
+
 # MCP / runtime data
 .mcp/
 .mcp_cache/

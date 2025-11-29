@@ -4,6 +4,8 @@
 
 Based on your request to implement all components in parallel, here's the practical implementation sequence:
 
+> NOTE: Go implementations in `MCP_structure_design/mcp-servers-go/dist` are now the primary artifacts for task-orchestrator, search-aggregator, and skills-manager. Legacy TypeScript paths mentioned below remain for historical reference and migration notes only.
+
 ### Phase 1: Foundation Setup (Day 1-2)
 1. **Project Structure** - Create all directories and configuration files
 2. **Environment Setup** - Configure environment variables and databases

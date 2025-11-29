@@ -72,9 +72,9 @@
 
 **Deploy These** (Go binaries):
 ```bash
-mcp-servers-go/dist/task-orchestrator    # ✅ 6MB, ~100ms startup
-mcp-servers-go/dist/search-aggregator    # ✅ 14MB, ~100ms startup
-mcp-servers-go/dist/skills-manager       # ✅ 14MB, ~100ms startup
+/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator    # ✅ 6MB, ~100ms startup
+/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/search-aggregator    # ✅ 14MB, ~100ms startup
+/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/skills-manager       # ✅ 14MB, ~100ms startup
 ```
 
 **Configure This** (Python):
@@ -84,9 +84,9 @@ mcp-servers/context-persistence/         # ✅ ML/vector requirements
 
 **Reference Only** (legacy implementations):
 ```bash
-mcp-servers/task-orchestrator/dist/index.js      # 📚 Reference only
-mcp-servers/search-aggregator/dist/index.js      # 📚 Reference only
-mcp-servers/skills-manager/dist/index.js         # 📚 Reference only
+/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator      # 📚 Reference only
+/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/search-aggregator      # 📚 Reference only
+/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/skills-manager         # 📚 Reference only
 mcp-servers/agent-swarm/dist/index.js            # 📚 Reference only
 ```
 
@@ -97,17 +97,17 @@ Use `config/mcp-servers.json`:
 {
   "mcpServers": {
     "task-orchestrator": {
-      "command": "/path/to/mcp-servers-go/dist/task-orchestrator",
+      "command": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/task-orchestrator",
       "args": [],
       "env": { "MCP_DATABASE_DIR": "/Users/ceverson/.mcp/tasks" }
     },
     "search-aggregator": {
-      "command": "/path/to/mcp-servers-go/dist/search-aggregator",
+      "command": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/search-aggregator",
       "args": [],
       "env": { "MCP_DATABASE_DIR": "/Users/ceverson/.mcp/cache" }
     },
     "skills-manager": {
-      "command": "/path/to/mcp-servers-go/dist/skills-manager",
+      "command": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/MCP_structure_design/mcp-servers-go/dist/skills-manager",
       "args": [],
       "env": { "MCP_DATABASE_DIR": "/Users/ceverson/.mcp/skills" }
     }
