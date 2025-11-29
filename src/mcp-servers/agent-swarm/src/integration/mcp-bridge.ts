@@ -24,6 +24,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const PROJECT_ROOT = join(__dirname, '..', '..', '..', '..', '..');
 const MCP_SERVERS_DIR = join(PROJECT_ROOT, 'src', 'mcp-servers');
+const GO_SERVERS_DIR = join(PROJECT_ROOT, 'MCP_structure_design', 'mcp-servers-go', 'dist');
 
 export interface MCPServerConnection {
   name: string;
@@ -114,8 +115,8 @@ function getServerCommandConfig(serverType: IntegrationType): MCPCommandConfig |
       };
     case 'skills_manager':
       return {
-        command: 'node',
-        args: [join(MCP_SERVERS_DIR, 'skills-manager', 'dist', 'index.js')],
+        command: join(GO_SERVERS_DIR, 'skills-manager'),
+        args: ['-db', join(homedir, '.mcp', 'skills', 'skills.db')],
         env: {
           SKILLS_DB_PATH: join(homedir, '.mcp', 'skills', 'skills.db'),
         },
