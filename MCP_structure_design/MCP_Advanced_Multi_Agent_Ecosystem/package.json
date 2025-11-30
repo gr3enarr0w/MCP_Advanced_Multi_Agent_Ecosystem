@@ -5,7 +5,8 @@
   "description": "Complete, production-ready MCP server ecosystem with multi-agent orchestration, skills management, search aggregation, context persistence, and GitHub OAuth integration.",
   "license": "MIT",
   "workspaces": [
-    "src/mcp-servers/*"
+    "src/mcp-servers/*",
+    "benchmarks"
   ],
   "scripts": {
     "bootstrap": "npm install",

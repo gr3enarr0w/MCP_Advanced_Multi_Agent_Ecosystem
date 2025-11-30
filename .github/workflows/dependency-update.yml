@@ -1,0 +1,432 @@
+name: Dependency Management
+
+on:
+  schedule:
+    # Check for dependency updates daily at 5 AM UTC
+    - cron: '0 5 * * *'
+  workflow_dispatch:
+    inputs:
+      update_type:
+        description: 'Type of dependency update'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - security
+          - minor
+          - patch
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+  GO_VERSION: '1.21'
+
+jobs:
+  # Check for Node.js dependency updates
+  check-node-updates:
+    name: Check Node.js Updates
+    runs-on: ubuntu-latest
+    if: github.event.inputs.update_type == 'all' || github.event.inputs.update_type == 'security' || github.event.inputs.update_type == ''
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Check for outdated dependencies
+      run: |
+        echo "# 📦 Node.js Dependency Update Report" > node-update-report.md
+        echo "" >> node-update-report.md
+        echo "Generated on: $(date)" >> node-update-report.md
+        echo "" >> node-update-report.md
+        
+        # Find all package.json files
+        find . -name "package.json" -not -path "./node_modules/*" -not -path "./.git/*" | while read pkg; do
+          dir=$(dirname "$pkg")
+          echo "## Checking $dir" >> node-update-report.md
+          cd "$dir"
+          
+          if [ -f "package-lock.json" ]; then
+            echo "### Current dependencies:" >> ../node-update-report.md
+            npm ls --depth=0 >> ../node-update-report.md
+            
+            echo "### Outdated dependencies:" >> ../node-update-report.md
+            npx outdated --json > outdated.json 2>/dev/null || true
+            
+            if [ -f "outdated.json" ]; then
+              # Parse outdated.json and format nicely
+              node -e "
+                const outdated = JSON.parse(require('fs').readFileSync('outdated.json', 'utf8'));
+                if (outdated.length > 0) {
+                  console.log('| Package | Current | Latest | Type |');
+                  console.log('|--------|--------|-------|------|');
+                  outdated.forEach(dep => {
+                    console.log('| ' + dep.name + ' | ' + dep.current + ' | ' + dep.latest + ' | ' + dep.type + ' |');
+                  });
+                } else {
+                  console.log('✅ All dependencies are up to date');
+                }
+              " >> ../node-update-report.md
+            else
+              echo "✅ All dependencies are up to date" >> ../node-update-report.md
+            fi
+          else
+            echo "⚠️ No package-lock.json found" >> ../node-update-report.md
+          fi
+          
+          cd ..
+        done
+
+    - name: Check for security vulnerabilities
+      run: |
+        echo "" >> node-update-report.md
+        echo "## Security Vulnerability Check" >> node-update-report.md
+        
+        # Find all package.json files
+        find . -name "package.json" -not -path "./node_modules/*" -not -path "./.git/*" | while read pkg; do
+          dir=$(dirname "$pkg")
+          echo "### Checking $dir for vulnerabilities" >> node-update-report.md
+          cd "$dir"
+          
+          if [ -f "package-lock.json" ]; then
+            echo '```' >> ../node-update-report.md
+            npm audit --audit-level moderate || true
+            echo '```' >> ../node-update-report.md
+          fi
+          
+          cd ..
+        done
+
+    - name: Upload Node.js update report
+      uses: actions/upload-artifact@v3
+      with:
+        name: node-dependency-update-report
+        path: node-update-report.md
+        retention-days: 7
+
+  # Check for Python dependency updates
+  check-python-updates:
+    name: Check Python Updates
+    runs-on: ubuntu-latest
+    if: github.event.inputs.update_type == 'all' || github.event.inputs.update_type == 'security' || github.event.inputs.update_type == ''
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Check for outdated Python dependencies
+      run: |
+        echo "# 🐍 Python Dependency Update Report" > python-update-report.md
+        echo "" >> python-update-report.md
+        echo "Generated on: $(date)" >> python-update-report.md
+        echo "" >> python-update-report.md
+        
+        # Check context persistence dependencies
+        if [ -f "src/mcp-servers/context-persistence/pyproject.toml" ]; then
+          cd src/mcp-servers/context-persistence
+          
+          echo "## Checking context-persistence" >> ../../python-update-report.md
+          echo "### Current dependencies:" >> ../../python-update-report.md
+          pip list --format=freeze >> ../../python-update-report.md
+          
+          echo "### Outdated dependencies:" >> ../../python-update-report.md
+          pip list --outdated --format=json > outdated.json 2>/dev/null || true
+          
+          if [ -f "outdated.json" ]; then
+              # Parse outdated.json and format nicely
+              python3 -c "
+import json
+try:
+    with open('outdated.json', 'r') as f:
+        outdated = json.load(f)
+        if outdated:
+            print('| Package | Current | Latest | Type |')
+            print('|--------|--------|-------|------|')
+            for dep in outdated:
+                print(f'| {dep[\"name\"]} | {dep[\"version_installed\"]} | {dep[\"latest_version\"]} | {dep[\"type\"]} |')
+        else:
+            print('✅ All dependencies are up to date')
+except:
+    print('⚠️ Could not parse outdated dependencies')
+" >> ../../python-update-report.md
+          else
+            echo "✅ All dependencies are up to date" >> ../../python-update-report.md
+          fi
+          
+          cd ../../..
+        fi
+
+    - name: Check for Python security vulnerabilities
+      run: |
+        echo "" >> python-update-report.md
+        echo "## Security Vulnerability Check" >> python-update-report.md
+        
+        # Check context persistence dependencies
+        if [ -f "src/mcp-servers/context-persistence/pyproject.toml" ]; then
+          cd src/mcp-servers/context-persistence
+          
+          echo "### Checking context-persistence for vulnerabilities" >> ../../python-update-report.md
+          echo '```' >> ../../python-update-report.md
+          safety check --json --output safety-report.json || true
+          echo '```' >> ../../python-update-report.md
+          
+          if [ -f "safety-report.json" ]; then
+              python3 -c "
+import json
+try:
+    with open('safety-report.json', 'r') as f:
+        report = json.load(f)
+        vulns = report.get('vulnerabilities', [])
+        if vulns:
+            print(f'⚠️ Found {len(vulns)} vulnerabilities')
+            for vuln in vulns[:5]:  # Show first 5
+                print(f'- {vuln[\"package_name\"]}@{vuln[\"analyzed_version\"]}: {vuln[\"advisory\"]}')
+        else:
+            print('✅ No vulnerabilities found')
+except:
+    print('⚠️ Could not parse safety report')
+" >> ../../python-update-report.md
+          fi
+          
+          cd ../../..
+        fi
+
+    - name: Upload Python update report
+      uses: actions/upload-artifact@v3
+      with:
+        name: python-dependency-update-report
+        path: python-update-report.md
+        retention-days: 7
+
+  # Check for Go dependency updates
+  check-go-updates:
+    name: Check Go Updates
+    runs-on: ubuntu-latest
+    if: github.event.inputs.update_type == 'all' || github.event.inputs.update_type == 'security' || github.event.inputs.update_type == ''
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Check for outdated Go dependencies
+      run: |
+        echo "# 🐹 Go Dependency Update Report" > go-update-report.md
+        echo "" >> go-update-report.md
+        echo "Generated on: $(date)" >> go-update-report.md
+        echo "" >> go-update-report.md
+        
+        if [ -f "MCP_structure_design/mcp-servers-go/go.mod" ]; then
+          cd MCP_structure_design/mcp-servers-go
+          
+          echo "## Checking Go dependencies" >> ../../go-update-report.md
+          echo "### Current dependencies:" >> ../../go-update-report.md
+          go list -m all >> ../../go-update-report.md
+          
+          echo "### Outdated dependencies:" >> ../../go-update-report.md
+          go list -u -m all >> ../../go-update-report.md || true
+          
+          cd ../../..
+        fi
+
+    - name: Check for Go security vulnerabilities
+      run: |
+        echo "" >> go-update-report.md
+        echo "## Security Vulnerability Check" >> go-update-report.md
+        
+        if [ -f "MCP_structure_design/mcp-servers-go/go.mod" ]; then
+          cd MCP_structure_design/mcp-servers-go
+          
+          echo "### Checking Go dependencies for vulnerabilities" >> ../../go-update-report.md
+          
+          # Use go list to check for known vulnerabilities (basic check)
+          if command -v govulncheck >/dev/null 2>&1; then
+            govulncheck ./... || true
+          else
+            echo "govulncheck not available, skipping vulnerability check" >> ../../go-update-report.md
+          fi
+          
+          cd ../../..
+        fi
+
+    - name: Upload Go update report
+      uses: actions/upload-artifact@v3
+      with:
+        name: go-dependency-update-report
+        path: go-update-report.md
+        retention-days: 7
+
+  # Create dependency update PR
+  create-update-pr:
+    name: Create Update PR
+    runs-on: ubuntu-latest
+    needs: [check-node-updates, check-python-updates, check-go-updates]
+    if: github.event_name == 'schedule' && (needs.check-node-updates.result == 'success' || needs.check-python-updates.result == 'success' || needs.check-go-updates.result == 'success')
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Setup Git
+      run: |
+        git config --local user.email "action@github.com"
+        git config --local user.name "GitHub Action"
+
+    - name: Download all update reports
+      uses: actions/download-artifact@v3
+      with:
+        path: update-reports
+
+    - name: Create update branch
+      run: |
+        BRANCH_NAME="dependency-updates-$(date +%Y%m%d-%H%M%S)"
+        git checkout -b "$BRANCH_NAME"
+        echo "Created branch: $BRANCH_NAME"
+
+    - name: Apply dependency updates
+      run: |
+        echo "## 📋 Dependency Update Summary" > update-summary.md
+        echo "" >> update-summary.md
+        echo "Generated on: $(date)" >> update-summary.md
+        echo "" >> update-summary.md
+        
+        UPDATES_MADE=false
+        
+        # Process Node.js updates
+        if [ -f "update-reports/node-dependency-update-report/node-update-report.md" ]; then
+          echo "### Node.js Updates" >> update-summary.md
+          cat update-reports/node-dependency-update-report/node-update-report.md >> update-summary.md
+          
+          # Auto-update Node.js dependencies (minor and patch only)
+          find . -name "package.json" -not -path "./node_modules/*" -not -path "./.git/*" | while read pkg; do
+            dir=$(dirname "$pkg")
+            echo "Updating dependencies in $dir..."
+            cd "$dir"
+            
+            if [ "${{ github.event.inputs.update_type }}" == "all" ] || [ "${{ github.event.inputs.update_type }}" == "minor" ] || [ "${{ github.event.inputs.update_type }}" == "patch" ]; then
+              npm update --save || true
+              UPDATES_MADE=true
+            fi
+            
+            cd ..
+          done
+        fi
+        
+        # Process Python updates
+        if [ -f "update-reports/python-dependency-update-report/python-update-report.md" ]; then
+          echo "### Python Updates" >> update-summary.md
+          cat update-reports/python-dependency-update-report/python-update-report.md >> update-summary.md
+          
+          # Auto-update Python dependencies
+          if [ -f "src/mcp-servers/context-persistence/pyproject.toml" ]; then
+            cd src/mcp-servers/context-persistence
+            
+            if [ "${{ github.event.inputs.update_type }}" == "all" ] || [ "${{ github.event.inputs.update_type }}" == "minor" ] || [ "${{ github.event.inputs.update_type }}" == "patch" ]; then
+              pip install --upgrade . || true
+              UPDATES_MADE=true
+            fi
+            
+            cd ../../..
+          fi
+        fi
+        
+        # Process Go updates
+        if [ -f "update-reports/go-dependency-update-report/go-update-report.md" ]; then
+          echo "### Go Updates" >> update-summary.md
+          cat update-reports/go-dependency-update-report/go-update-report.md >> update-summary.md
+          
+          # Auto-update Go dependencies
+          if [ -f "MCP_structure_design/mcp-servers-go/go.mod" ]; then
+            cd MCP_structure_design/mcp-servers-go
+            
+            if [ "${{ github.event.inputs.update_type }}" == "all" ] || [ "${{ github.event.inputs.update_type }}" == "minor" ] || [ "${{ github.event.inputs.update_type }}" == "patch" ]; then
+              go get -u ./... || true
+              go mod tidy
+              UPDATES_MADE=true
+            fi
+            
+            cd ../../..
+          fi
+        fi
+        
+        echo "" >> update-summary.md
+        if [ "$UPDATES_MADE" = "true" ]; then
+          echo "### 🔄 Updates Applied" >> update-summary.md
+          echo "Dependencies have been updated. Please review the changes." >> update-summary.md
+        else
+          echo "### ✅ No Updates Needed" >> update-summary.md
+          echo "All dependencies are up to date." >> update-summary.md
+        fi
+
+    - name: Commit and push changes
+      if: steps.apply-dependency-updates.outcome == 'success'
+      run: |
+        git add .
+        git commit -m "🔄 Automated dependency updates
+
+        - Node.js: ${{ github.event.inputs.update_type }}
+        - Python: ${{ github.event.inputs.update_type }}
+        - Go: ${{ github.event.inputs.update_type }}
+
+        [skip ci]"
+        
+        git push origin "$BRANCH_NAME"
+
+    - name: Create Pull Request
+      if: steps.apply-dependency-updates.outcome == 'success'
+      run: |
+        # Create PR using GitHub CLI
+        gh pr create \
+          --title "🔄 Automated Dependency Updates (${{ github.event.inputs.update_type }})" \
+          --body "$(cat update-summary.md)" \
+          --head "$BRANCH_NAME" \
+          --base main \
+          --label "dependencies" \
+          --label "automated" || true
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload update summary
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: dependency-update-summary
+        path: update-summary.md
+        retention-days: 7
+
+  # Notification job
+  notify-updates:
+    name: Notify Updates
+    runs-on: ubuntu-latest
+    needs: [create-update-pr]
+    if: always()
+    
+    steps:
+    - name: Download update summary
+      uses: actions/download-artifact@v3
+      with:
+        name: dependency-update-summary
+        path: update-summary
+
+    - name: Send notification
+      if: needs.create-update-pr.result == 'success'
+      run: |
+        echo "Dependency update process completed successfully"
+        # Add notification logic here (Slack, email, etc.)
+        # This would require additional secrets for notification services

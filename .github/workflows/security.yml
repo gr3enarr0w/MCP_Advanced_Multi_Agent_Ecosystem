@@ -1,0 +1,475 @@
+name: Security and Dependency Management
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run security scans daily at 4 AM UTC
+    - cron: '0 4 * * *'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+  GO_VERSION: '1.21'
+
+jobs:
+  # Dependency vulnerability scanning
+  security-scan:
+    name: Security Vulnerability Scan
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        include:
+          - name: 'Node.js Dependencies'
+            path: '.'
+            scan-command: 'npm audit --audit-level moderate'
+            cache-key: 'npm-audit'
+          - name: 'Python Dependencies'
+            path: 'src/mcp-servers/context-persistence'
+            scan-command: 'safety check --json --output safety-report.json'
+            cache-key: 'safety-check'
+          - name: 'Go Dependencies'
+            path: 'MCP_structure_design/mcp-servers-go'
+            scan-command: 'go list -m -json all | go-audit'
+            cache-key: 'go-audit'
+    
+    steps:
+    - name: Checkout with submodules
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup Node.js
+      if: matrix.cache-key == 'npm-audit'
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Setup Python
+      if: matrix.cache-key == 'safety-check'
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Setup Go
+      if: matrix.cache-key == 'go-audit'
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache security tools
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.npm
+          ~/.cache/pip
+          ~/.cache/go-build
+        key: security-${{ matrix.cache-key }}-${{ hashFiles('**/package-lock.json', '**/go.sum', '**/pyproject.toml') }}
+        restore-keys: |
+          security-${{ matrix.cache-key }}-
+
+    - name: Install security tools
+      run: |
+        case "${{ matrix.cache-key }}" in
+          "npm-audit")
+            npm install -g npm-audit-resolver
+            ;;
+          "safety-check")
+            pip install safety
+            ;;
+          "go-audit")
+            go install github.com/securecodewarrior/govuln@latest
+            ;;
+        esac
+
+    - name: Run security scan
+      working-directory: ${{ matrix.path }}
+      run: |
+        echo "Running security scan for ${{ matrix.name }}..."
+        ${{ matrix.scan-command }} || true
+
+    - name: Process security results
+      working-directory: ${{ matrix.path }}
+      run: |
+        case "${{ matrix.cache-key }}" in
+          "npm-audit")
+            echo "Processing npm audit results..."
+            npm audit --audit-level moderate --json > npm-audit-results.json || true
+            ;;
+          "safety-check")
+            echo "Processing safety check results..."
+            if [ -f "safety-report.json" ]; then
+              echo "Safety report generated"
+            fi
+            ;;
+          "go-audit")
+            echo "Processing go audit results..."
+            go list -m -json all > go-deps.json || true
+            ;;
+        esac
+
+    - name: Upload security scan results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-results-${{ matrix.cache-key }}
+        path: |
+          ${{ matrix.path }}/npm-audit-results.json
+          ${{ matrix.path }}/safety-report.json
+          ${{ matrix.path }}/go-deps.json
+        retention-days: 30
+
+  # Code security analysis
+  code-analysis:
+    name: Code Security Analysis
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        include:
+          - name: 'Python Code Analysis'
+            path: 'src/mcp-servers/context-persistence'
+            tool: 'bandit'
+            config: 'bandit -r src/ -f json -o bandit-report.json'
+          - name: 'TypeScript Code Analysis'
+            path: 'src/mcp-servers'
+            tool: 'eslint'
+            config: 'npx eslint . --format json --output-file eslint-report.json || true'
+          - name: 'Go Code Analysis'
+            path: 'MCP_structure_design/mcp-servers-go'
+            tool: 'gosec'
+            config: 'gosec ./... -fmt json -out gosec-report.json || true'
+    
+    steps:
+    - name: Checkout with submodules
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup Python
+      if: matrix.tool == 'bandit'
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Setup Node.js
+      if: matrix.tool == 'eslint'
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Setup Go
+      if: matrix.tool == 'gosec'
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Install analysis tools
+      run: |
+        case "${{ matrix.tool }}" in
+          "bandit")
+            pip install bandit
+            ;;
+          "eslint")
+            cd src/mcp-servers && npm install
+            ;;
+          "gosec")
+            go install github.com/securecodewarrior/gosec@latest
+            ;;
+        esac
+
+    - name: Run code analysis
+      working-directory: ${{ matrix.path }}
+      run: |
+        echo "Running ${{ matrix.tool }} analysis for ${{ matrix.name }}..."
+        ${{ matrix.config }}
+
+    - name: Upload code analysis results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: code-analysis-${{ matrix.tool }}
+        path: |
+          ${{ matrix.path }}/bandit-report.json
+          ${{ matrix.path }}/eslint-report.json
+          ${{ matrix.path }}/gosec-report.json
+        retention-days: 30
+
+  # Secret detection
+  secret-detection:
+    name: Secret Detection
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout with submodules
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Install secret detection tools
+      run: |
+        npm install -g git-secrets
+        pip install detect-secrets
+
+    - name: Scan for secrets
+      run: |
+        echo "Scanning for hardcoded secrets..."
+        
+        # Scan with git-secrets
+        git-secrets scan --all-files --baseline .secrets_baseline || true
+        
+        # Scan with detect-secrets for Python
+        find src/mcp-servers/context-persistence -name "*.py" -exec detect-secrets {} \; || true
+        
+        # Basic pattern matching as fallback
+        echo "Checking for common secret patterns..."
+        if grep -r -i "password\|secret\|token\|key.*=" --include="*.js,*.ts,*.py,*.go" --exclude-dir=node_modules --exclude-dir=.git .; then
+          echo "⚠️ Potential hardcoded secrets found"
+          grep -r -i -n "password\|secret\|token\|key.*=" --include="*.js,*.ts,*.py,*.go" --exclude-dir=node_modules --exclude-dir=.git . || true
+        else
+          echo "✅ No hardcoded secrets detected"
+        fi
+
+    - name: Upload secret detection results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: secret-detection-results
+        path: |
+          git-secrets-results/
+          detect-secrets-results/
+          secret-scan.log
+        retention-days: 30
+
+  # License compliance
+  license-check:
+    name: License Compliance Check
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout with submodules
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Install license checker
+      run: |
+        npm install -g license-checker
+
+    - name: Check license compliance
+      run: |
+        echo "Checking license compliance..."
+        
+        # Check Node.js packages
+        find . -name "package.json" -not -path "./node_modules/*" -not -path "./.git/*" | while read pkg; do
+          dir=$(dirname "$pkg")
+          echo "Checking licenses in $dir"
+          cd "$dir"
+          license-checker --onlyAllow 'MIT;Apache-2.0;BSD-2-Clause;BSD-3-Clause;ISC' || true
+          cd - > /dev/null
+        done
+        
+        # Check Go dependencies
+        if [ -f "MCP_structure_design/mcp-servers-go/go.mod" ]; then
+          cd MCP_structure_design/mcp-servers-go
+          go list -m all | grep -E "(MIT|Apache-2.0|BSD|ISC)" || echo "Some Go dependencies may need license review"
+        fi
+
+    - name: Upload license check results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: license-compliance-results
+        path: |
+          license-check-results/
+          license-reports.json
+        retention-days: 30
+
+  # Security summary
+  security-summary:
+    name: Security Summary
+    runs-on: ubuntu-latest
+    needs: [security-scan, code-analysis, secret-detection, license-check]
+    if: always()
+    
+    steps:
+    - name: Download all security results
+      uses: actions/download-artifact@v3
+      with:
+        path: security-results
+
+    - name: Generate security summary
+      run: |
+        echo "# 🔒 Security Scan Summary" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Scan Type | Status | Issues Found |" >> $GITHUB_STEP_SUMMARY
+        echo "|------------|--------|-------------|" >> $GITHUB_STEP_SUMMARY
+        
+        # Check each scan result
+        if [ -d "security-results/npm-audit" ]; then
+          echo "| npm Audit | ✅ Completed | See artifacts |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| npm Audit | ⚠️ Skipped | N/A |" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ -d "security-results/safety-check" ]; then
+          echo "| Safety Check | ✅ Completed | See artifacts |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| Safety Check | ⚠️ Skipped | N/A |" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ -d "security-results/go-audit" ]; then
+          echo "| Go Audit | ✅ Completed | See artifacts |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| Go Audit | ⚠️ Skipped | N/A |" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ -d "security-results/bandit" ]; then
+          echo "| Bandit Analysis | ✅ Completed | See artifacts |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| Bandit Analysis | ⚠️ Skipped | N/A |" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ -d "security-results/eslint" ]; then
+          echo "| ESLint Analysis | ✅ Completed | See artifacts |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| ESLint Analysis | ⚠️ Skipped | N/A |" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ -d "security-results/gosec" ]; then
+          echo "| GoSec Analysis | ✅ Completed | See artifacts |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| GoSec Analysis | ⚠️ Skipped | N/A |" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ -d "security-results/secret-detection" ]; then
+          echo "| Secret Detection | ✅ Completed | See artifacts |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| Secret Detection | ⚠️ Skipped | N/A |" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        if [ -d "security-results/license-compliance" ]; then
+          echo "| License Check | ✅ Completed | See artifacts |" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "| License Check | ⚠️ Skipped | N/A |" >> $GITHUB_STEP_SUMMARY
+        fi
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## 📋 Security Recommendations" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "1. Review all security scan artifacts for detailed findings" >> $GITHUB_STEP_SUMMARY
+        echo "2. Address any high-severity vulnerabilities immediately" >> $GITHUB_STEP_SUMMARY
+        echo "3. Update dependencies regularly to patch security issues" >> $GITHUB_STEP_SUMMARY
+        echo "4. Ensure no hardcoded secrets are committed to the repository" >> $GITHUB_STEP_SUMMARY
+
+    - name: Upload combined security results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: combined-security-results
+        path: security-results/
+        retention-days: 30
+
+    - name: Security status check
+      run: |
+        # Check if any critical security issues were found
+        CRITICAL_ISSUES=false
+        
+        # Check for critical vulnerabilities in npm audit (simplified check)
+        if [ -d "security-results/npm-audit" ] && find security-results/npm-audit -name "*.json" -exec grep -l "critical" {} \; 2>/dev/null; then
+          CRITICAL_ISSUES=true
+        fi
+        
+        # Check for high-severity issues in bandit
+        if [ -d "security-results/bandit" ] && find security-results/bandit -name "*.json" -exec grep -l '"severity": "HIGH"' {} \; 2>/dev/null; then
+          CRITICAL_ISSUES=true
+        fi
+        
+        if [ "$CRITICAL_ISSUES" = "true" ]; then
+          echo "❌ CRITICAL security issues found - immediate attention required"
+          exit 1
+        else
+          echo "✅ No critical security issues detected"
+        fi
+
+  # Dependency update check
+  dependency-update:
+    name: Check for Dependency Updates
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    
+    steps:
+    - name: Checkout with submodules
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Check for outdated Node.js dependencies
+      run: |
+        echo "Checking for outdated Node.js dependencies..."
+        find . -name "package.json" -not -path "./node_modules/*" -not -path "./.git/*" | while read pkg; do
+          dir=$(dirname "$pkg")
+          echo "Checking $dir"
+          cd "$dir"
+          npx outdated --json || true
+          cd - > /dev/null
+        done
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Check for outdated Python dependencies
+      run: |
+        echo "Checking for outdated Python dependencies..."
+        cd src/mcp-servers/context-persistence
+        pip list --outdated --format=json || true
+
+    - name: Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Check for outdated Go dependencies
+      run: |
+        echo "Checking for outdated Go dependencies..."
+        cd MCP_structure_design/mcp-servers-go
+        go list -u -m all || true
+
+    - name: Create dependency update report
+      run: |
+        echo "# 📦 Dependency Update Report" > dependency-report.md
+        echo "" >> dependency-report.md
+        echo "Generated on: $(date)" >> dependency-report.md
+        echo "" >> dependency-report.md
+        echo "## Update Recommendations" >> dependency-report.md
+        echo "1. Review outdated dependencies and update as needed" >> dependency-report.md
+        echo "2. Test updates in a development environment before merging" >> dependency-report.md
+        echo "3. Prioritize security updates over feature updates" >> dependency-report.md
+
+    - name: Upload dependency report
+      uses: actions/upload-artifact@v3
+      with:
+        name: dependency-update-report
+        path: dependency-report.md
+        retention-days: 7

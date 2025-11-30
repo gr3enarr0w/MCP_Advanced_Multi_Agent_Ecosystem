@@ -1,8 +1,8 @@
 /**
  * Search Aggregator MCP Server
- * 
+ *
  * Multi-provider search aggregation with caching, result ranking, and fallback mechanisms
- * 
+ *
  * Core Capabilities:
  * - Multi-provider search with automatic fallback
  * - Result caching and deduplication
@@ -24,6 +24,18 @@ import { existsSync, mkdirSync } from 'fs';
 import initSqlJs, { Database } from 'sql.js';
 import { v4 as uuidv4 } from 'uuid';
 
+// Import real search providers
+import { TavilyProvider } from './providers/tavily-provider';
+import { PerplexityProvider } from './providers/perplexity-provider';
+import { BraveProvider } from './providers/brave-provider';
+import { DuckDuckGoProvider } from './providers/duckduckgo-provider';
+
+// Import Phase 8 enhancements
+import { ResearchPlanner } from './research-planner';
+import { LocalDocumentSearch, searchLocalDocuments } from './local-search';
+import { ParallelSearchExecutor, executeParallelSearches } from './parallel-executor';
+import { ReportSynthesizer, generateReport, createComparison } from './report-synthesizer';
+
 // Configuration
 const MCP_HOME = process.env.MCP_HOME || join(homedir(), '.mcp');
 const CACHE_DB = join(MCP_HOME, 'cache', 'search', 'search_cache.db');
@@ -37,9 +49,9 @@ if (!existsSync(join(MCP_HOME, 'cache', 'search'))) {
 }
 
 // Types
-type SearchProvider = 'google' | 'bing' | 'duckduckgo' | 'serpapi' | 'tavily';
+type SearchProvider = 'tavily' | 'perplexity' | 'brave' | 'duckduckgo';
 
-interface SearchResult {
+export interface SearchResult {
   id: string;
   title: string;
   url: string;
@@ -47,6 +59,7 @@ interface SearchResult {
   source: SearchProvider;
   score: number;
   timestamp: string;
+  citations?: string[];
 }
 
 interface SearchCacheRow {
@@ -73,64 +86,6 @@ abstract class BaseSearchProvider {
     } catch {
       return false;
     }
-  }
-}
-
-// Mock Google Search Provider (replace with actual implementation)
-class GoogleProvider extends BaseSearchProvider {
-  name: SearchProvider = 'google';
-
-  async search(query: string, options?: { limit?: number; language?: string }): Promise<SearchResult[]> {
-    // Mock implementation - replace with actual Google Search API
-    const limit = options?.limit || 10;
-    
-    return Array.from({ length: Math.min(limit, 5) }, (_, i) => ({
-      id: uuidv4(),
-      title: `Google Result ${i + 1} for "${query}"`,
-      url: `https://google.com/search?q=${encodeURIComponent(query)}&start=${i * 10}`,
-      snippet: `This is a mock search result from Google for the query "${query}". In a real implementation, this would contain the actual search snippet.`,
-      source: 'google' as SearchProvider,
-      score: 0.9 - (i * 0.1),
-      timestamp: new Date().toISOString(),
-    }));
-  }
-}
-
-// Mock DuckDuckGo Provider
-class DuckDuckGoProvider extends BaseSearchProvider {
-  name: SearchProvider = 'duckduckgo';
-
-  async search(query: string, options?: { limit?: number; language?: string }): Promise<SearchResult[]> {
-    const limit = options?.limit || 10;
-    
-    return Array.from({ length: Math.min(limit, 5) }, (_, i) => ({
-      id: uuidv4(),
-      title: `DuckDuckGo Result ${i + 1} for "${query}"`,
-      url: `https://duckduckgo.com/?q=${encodeURIComponent(query)}`,
-      snippet: `Private search result from DuckDuckGo for "${query}". This is a mock result.`,
-      source: 'duckduckgo' as SearchProvider,
-      score: 0.8 - (i * 0.1),
-      timestamp: new Date().toISOString(),
-    }));
-  }
-}
-
-// Mock SerpAPI Provider
-class SerpApiProvider extends BaseSearchProvider {
-  name: SearchProvider = 'serpapi';
-
-  async search(query: string, options?: { limit?: number; language?: string }): Promise<SearchResult[]> {
-    const limit = options?.limit || 10;
-    
-    return Array.from({ length: Math.min(limit, 5) }, (_, i) => ({
-      id: uuidv4(),
-      title: `SerpAPI Result ${i + 1} for "${query}"`,
-      url: `https://serpapi.com/search?q=${encodeURIComponent(query)}`,
-      snippet: `Professional search API result for "${query}". Mock implementation.`,
-      source: 'serpapi' as SearchProvider,
-      score: 0.85 - (i * 0.1),
-      timestamp: new Date().toISOString(),
-    }));
   }
 }
 
@@ -281,14 +236,68 @@ class SearchCacheStore {
 class SearchAggregator {
   private cache: SearchCacheStore;
   private providers: BaseSearchProvider[];
+  private providerPriority: Record<SearchProvider, number> = {
+    'tavily': 1,
+    'perplexity': 2,
+    'brave': 3,
+    'duckduckgo': 4,
+  };
 
   constructor() {
     this.cache = new SearchCacheStore();
-    this.providers = [
-      new GoogleProvider(),
-      new DuckDuckGoProvider(),
-      new SerpApiProvider(),
-    ];
+    this.providers = this.initializeProviders();
+  }
+
+  private initializeProviders(): BaseSearchProvider[] {
+    const providers: BaseSearchProvider[] = [];
+
+    // Initialize DuckDuckGo (no API key required)
+    try {
+      providers.push(new DuckDuckGoProvider());
+    } catch (error) {
+      console.warn('Failed to initialize DuckDuckGo provider:', error);
+    }
+
+    // Initialize Tavily (requires API key)
+    const tavilyKey = process.env.TAVILY_API_KEY;
+    if (tavilyKey) {
+      try {
+        providers.push(new TavilyProvider(tavilyKey));
+      } catch (error) {
+        console.warn('Failed to initialize Tavily provider:', error);
+      }
+    } else {
+      console.warn('TAVILY_API_KEY not found, Tavily provider will not be available');
+    }
+
+    // Initialize Perplexity (requires API key)
+    const perplexityKey = process.env.PERPLEXITY_API_KEY;
+    if (perplexityKey) {
+      try {
+        providers.push(new PerplexityProvider(perplexityKey));
+      } catch (error) {
+        console.warn('Failed to initialize Perplexity provider:', error);
+      }
+    } else {
+      console.warn('PERPLEXITY_API_KEY not found, Perplexity provider will not be available');
+    }
+
+    // Initialize Brave (requires API key)
+    const braveKey = process.env.BRAVE_API_KEY;
+    if (braveKey) {
+      try {
+        providers.push(new BraveProvider(braveKey));
+      } catch (error) {
+        console.warn('Failed to initialize Brave provider:', error);
+      }
+    } else {
+      console.warn('BRAVE_API_KEY not found, Brave provider will not be available');
+    }
+
+    // Sort providers by priority
+    providers.sort((a, b) => this.providerPriority[a.name] - this.providerPriority[b.name]);
+
+    return providers;
   }
 
   async initialize(): Promise<void> {
@@ -323,30 +332,41 @@ class SearchAggregator {
       }
     }
 
-    // Fall back to live search
+    // Fall back to live search with parallel execution
     const allResults: SearchResult[] = [];
+    const providerPromises: Promise<{ provider: SearchProvider; results: SearchResult[] }>[] = [];
     
+    // Create parallel search promises for requested providers
     for (const provider of this.providers) {
       if (!providers.includes(provider.name)) continue;
 
-      try {
-        const results = await provider.search(query, { limit });
-        
-        // Deduplicate by URL
-        for (const result of results) {
-          if (!allResults.find(r => r.url === result.url) && result.score >= minScore) {
-            allResults.push(result);
-          }
-        }
+      const promise = provider.search(query, { limit })
+        .then(results => ({ provider: provider.name, results }))
+        .catch(error => {
+          console.warn(`Search failed for ${provider.name}:`, error);
+          return { provider: provider.name, results: [] as SearchResult[] };
+        });
+      
+      providerPromises.push(promise);
+    }
 
-        // Cache successful results
-        if (results.length > 0) {
-          await this.cache.saveResult(query, provider.name, results);
-        }
+    // Execute all searches in parallel
+    const providerResults = await Promise.all(providerPromises);
 
-      } catch (error) {
-        console.warn(`Search failed for ${provider.name}:`, error);
-        continue;
+    // Process results with deduplication
+    const seenUrls = new Set<string>();
+    for (const { provider, results } of providerResults) {
+      // Cache successful results
+      if (results.length > 0) {
+        await this.cache.saveResult(query, provider, results);
+      }
+
+      // Deduplicate by URL and filter by score
+      for (const result of results) {
+        if (!seenUrls.has(result.url) && result.score >= minScore) {
+          seenUrls.add(result.url);
+          allResults.push(result);
+        }
       }
     }
 
@@ -423,10 +443,10 @@ const tools: Tool[] = [
       properties: {
         query: { type: 'string', description: 'Search query' },
         limit: { type: 'number', description: 'Maximum results to return', default: 10 },
-        providers: { 
-          type: 'array', 
-          items: { type: 'string', enum: ['google', 'bing', 'duckduckgo', 'serpapi', 'tavily'] },
-          description: 'Specific providers to use (empty = all available)' 
+        providers: {
+          type: 'array',
+          items: { type: 'string', enum: ['tavily', 'perplexity', 'brave', 'duckduckgo'] },
+          description: 'Specific providers to use (empty = all available)'
         },
         use_cache: { type: 'boolean', description: 'Use cached results if available', default: true },
         min_score: { type: 'number', description: 'Minimum result score (0-1)', default: 0 },
@@ -442,10 +462,10 @@ const tools: Tool[] = [
       properties: {
         queries: { type: 'array', items: { type: 'string' }, description: 'List of search queries' },
         limit: { type: 'number', description: 'Results per query', default: 5 },
-        providers: { 
-          type: 'array', 
-          items: { type: 'string', enum: ['google', 'bing', 'duckduckgo', 'serpapi', 'tavily'] },
-          description: 'Specific providers to use' 
+        providers: {
+          type: 'array',
+          items: { type: 'string', enum: ['tavily', 'perplexity', 'brave', 'duckduckgo'] },
+          description: 'Specific providers to use'
         },
         use_cache: { type: 'boolean', description: 'Use cached results', default: true },
       },
@@ -468,6 +488,82 @@ const tools: Tool[] = [
       properties: {
         max_age_days: { type: 'number', description: 'Maximum age in days to keep (default: 7)', default: 7 },
       },
+    },
+  },
+  {
+    name: 'deep_research',
+    description: 'Perform comprehensive deep research on a topic using multiple strategies and sources',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        topic: { type: 'string', description: 'Research topic to investigate' },
+        depth: { type: 'string', enum: ['quick', 'standard', 'comprehensive'], description: 'Research depth level', default: 'standard' },
+        breadth: { type: 'string', enum: ['focused', 'balanced', 'extensive'], description: 'Research breadth level', default: 'balanced' },
+        include_local: { type: 'boolean', description: 'Include local document search', default: true },
+        max_sources: { type: 'number', description: 'Maximum number of sources to gather', default: 20 },
+      },
+      required: ['topic'],
+    },
+  },
+  {
+    name: 'generate_research_plan',
+    description: 'Generate a detailed research plan for a given topic with structured approach',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        topic: { type: 'string', description: 'Topic to create research plan for' },
+        methodology: { type: 'string', enum: ['academic', 'practical', 'exploratory', 'comparative'], description: 'Research methodology', default: 'exploratory' },
+        depth: { type: 'string', enum: ['quick', 'standard', 'comprehensive'], description: 'Plan depth level', default: 'standard' },
+        breadth: { type: 'string', enum: ['focused', 'balanced', 'extensive'], description: 'Plan breadth level', default: 'balanced' },
+        include_local: { type: 'boolean', description: 'Include local search strategies', default: true },
+      },
+      required: ['topic'],
+    },
+  },
+  {
+    name: 'search_local_documents',
+    description: 'Search through indexed local documents with relevance scoring',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query' },
+        paths: { type: 'array', items: { type: 'string' }, description: 'Optional paths to search within' },
+        max_results: { type: 'number', description: 'Maximum results to return', default: 20 },
+        min_score: { type: 'number', description: 'Minimum relevance score (0-1)', default: 0.1 },
+        search_in: { type: 'array', items: { type: 'string', enum: ['title', 'content', 'summary'] }, description: 'Fields to search in', default: ['title', 'content', 'summary'] },
+        fuzzy_match: { type: 'boolean', description: 'Enable fuzzy matching', default: true },
+      },
+      required: ['query'],
+    },
+  },
+  {
+    name: 'generate_report',
+    description: 'Generate comprehensive research report in multiple formats',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        research_id: { type: 'string', description: 'Unique research identifier' },
+        format: { type: 'string', enum: ['markdown', 'html', 'json'], description: 'Output format', default: 'markdown' },
+        include_executive_summary: { type: 'boolean', description: 'Include executive summary', default: true },
+        include_methodology: { type: 'boolean', description: 'Include methodology section', default: true },
+        include_sources: { type: 'boolean', description: 'Include sources section', default: true },
+        include_comparisons: { type: 'boolean', description: 'Include comparison tables', default: true },
+        detailed_analysis: { type: 'boolean', description: 'Include detailed analysis sections', default: true },
+      },
+      required: ['research_id'],
+    },
+  },
+  {
+    name: 'create_comparison',
+    description: 'Create structured comparison table between different approaches or items',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        topic: { type: 'string', description: 'Comparison topic or question' },
+        items: { type: 'array', items: { type: 'object' }, description: 'Items to compare' },
+        criteria: { type: 'array', items: { type: 'string' }, description: 'Comparison criteria (auto-detected if not provided)' },
+      },
+      required: ['topic', 'items'],
     },
   },
 ];
@@ -564,6 +660,188 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               text: JSON.stringify({
                 message: `Cleared ${deleted} cache entries`,
                 max_age_days: args?.max_age_days || 7,
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'deep_research': {
+        const { topic, depth, breadth, include_local, max_sources } = args;
+        
+        // Generate research plan
+        const plan = ResearchPlanner.generateResearchPlan(topic, {
+          depth,
+          breadth,
+          includeLocal: include_local,
+          maxQuestions: Math.min(max_sources, 15),
+        });
+
+        // Execute parallel searches
+        const executor = new ParallelSearchExecutor();
+        await executor.initialize();
+        
+        try {
+          const executionPlan = await executor.executeParallelSearches(plan, {
+            maxConcurrent: 3,
+            rateLimitDelay: 1000,
+            timeout: 30,
+          });
+
+          // Generate report
+          const searchResults = executor.aggregateResults(executionPlan);
+          const report = generateReport(
+            plan.id,
+            plan,
+            searchResults,
+            [], // No local documents in this simple implementation
+            {
+              format: 'markdown',
+              includeExecutiveSummary: true,
+              includeSources: true,
+              detailedAnalysis: true,
+            }
+          );
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  research_id: plan.id,
+                  topic,
+                  status: executionPlan.status,
+                  total_tasks: executionPlan.totalTasks,
+                  completed_tasks: executionPlan.tasks.filter(t => t.status === 'completed').length,
+                  report_preview: report.executiveSummary,
+                  report_sections: report.sections.length,
+                  total_sources: report.sources.length,
+                }, null, 2),
+              },
+            ],
+          };
+        } finally {
+          await executor.cleanup();
+        }
+      }
+
+      case 'generate_research_plan': {
+        const { topic, methodology, depth, breadth, include_local } = args;
+        
+        const plan = ResearchPlanner.generateResearchPlan(topic, {
+          methodology,
+          depth,
+          breadth,
+          includeLocal: include_local,
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                plan_id: plan.id,
+                topic: plan.topic,
+                objective: plan.objective,
+                scope: plan.scope,
+                methodology: plan.methodology,
+                questions_count: plan.questions.length,
+                strategies_count: plan.strategies.length,
+                estimated_time: plan.timeline.totalEstimatedTime,
+                phases: plan.timeline.phases,
+                success_criteria: plan.successCriteria,
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'search_local_documents': {
+        const { query, paths, max_results, min_score, search_in, fuzzy_match } = args;
+        
+        const results = await searchLocalDocuments(query, paths, {
+          maxResults: max_results,
+          minScore: min_score,
+          searchIn: search_in,
+          fuzzyMatch: fuzzy_match,
+          includeMetadata: true,
+        });
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                query,
+                results_count: results.length,
+                results: results.map(r => ({
+                  document: {
+                    id: r.document.id,
+                    title: r.document.title,
+                    type: r.document.type,
+                    language: r.document.language,
+                    path: r.document.path,
+                    summary: r.document.summary,
+                  },
+                  score: r.score,
+                  matches: r.matches,
+                })),
+              }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'generate_report': {
+        const { research_id, format, include_executive_summary, include_methodology, include_sources, include_comparisons, detailed_analysis } = args;
+        
+        // Note: In a real implementation, you would retrieve the stored research data
+        // For this implementation, we'll return a placeholder response
+        const synthesizer = new ReportSynthesizer();
+        
+        // Create a mock report for demonstration
+        const mockReport = {
+          id: research_id,
+          title: `Research Report: ${research_id}`,
+          format,
+          generatedAt: new Date().toISOString(),
+          status: 'generated',
+          message: 'Report generation requires stored research data. Use deep_research first to generate and store research data.',
+        };
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify(mockReport, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'create_comparison': {
+        const { topic, items, criteria } = args;
+        
+        const comparison = createComparison(topic, items, criteria);
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                comparison_id: comparison.id,
+                title: comparison.title,
+                description: comparison.description,
+                criteria: comparison.criteria,
+                items_count: comparison.items.length,
+                winner: comparison.winner,
+                analysis: comparison.analysis,
+                items: comparison.items.map(item => ({
+                  name: item.name,
+                  score: item.score,
+                  pros: item.pros,
+                  cons: item.cons,
+                })),
               }, null, 2),
             },
           ],

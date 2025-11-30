@@ -1,0 +1,453 @@
+name: Comprehensive Testing
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run comprehensive tests daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Type of tests to run'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - unit
+          - integration
+          - e2e
+          - performance
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+  GO_VERSION: '1.21'
+
+jobs:
+  # Unit Tests
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'unit' || github.event.inputs.test_type == ''
+    
+    strategy:
+      matrix:
+        include:
+          - name: 'Go Servers'
+            path: 'MCP_structure_design/mcp-servers-go'
+            test-command: 'go test ./... -v -short'
+            cache-key: 'go-unit'
+          - name: 'TypeScript Servers'
+            path: 'src/mcp-servers'
+            test-command: 'npm run test:unit --if-present'
+            cache-key: 'ts-unit'
+          - name: 'Python Context Persistence'
+            path: 'src/mcp-servers/context-persistence'
+            test-command: 'python -m pytest tests/unit -v --tb=short'
+            cache-key: 'py-unit'
+    
+    steps:
+    - name: Checkout with submodules
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup Node.js
+      if: matrix.cache-key == 'ts-unit'
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Setup Python
+      if: matrix.cache-key == 'py-unit'
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Setup Go
+      if: matrix.cache-key == 'go-unit'
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Cache dependencies
+      uses: actions/cache@v3
+      with:
+        path: |
+          ~/.npm
+          ~/.cache/pip
+          ~/.cache/go-build
+          ~/go/pkg/mod
+        key: ${{ matrix.cache-key }}-${{ hashFiles('**/package-lock.json', '**/go.sum', '**/pyproject.toml') }}
+        restore-keys: |
+          ${{ matrix.cache-key }}-
+
+    - name: Install dependencies
+      run: |
+        case "${{ matrix.cache-key }}" in
+          "ts-unit")
+            cd src/mcp-servers && npm install
+            ;;
+          "py-unit")
+            python -m pip install --upgrade pip
+            pip install -e src/mcp-servers/context-persistence[dev]
+            ;;
+          "go-unit")
+            # Go modules are cached, no additional install needed
+            ;;
+        esac
+
+    - name: Run unit tests
+      working-directory: ${{ matrix.path }}
+      run: |
+        echo "Running unit tests for ${{ matrix.name }}..."
+        ${{ matrix.test-command }}
+
+    - name: Upload unit test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: unit-test-results-${{ matrix.cache-key }}
+        path: |
+          ${{ matrix.path }}/coverage/
+          ${{ matrix.path }}/test-results/
+        retention-days: 7
+
+  # Integration Tests
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'integration' || github.event.inputs.test_type == ''
+    
+    strategy:
+      matrix:
+        include:
+          - name: 'Go Integration'
+            path: 'MCP_structure_design/mcp-servers-go'
+            test-command: 'go test -v ./test/integration/... -timeout 60s'
+          - name: 'TypeScript Integration'
+            path: 'src/mcp-servers'
+            test-command: 'npm run test:integration --if-present'
+          - name: 'Python Integration'
+            path: 'src/mcp-servers/context-persistence'
+            test-command: 'python -m pytest tests/integration -v --tb=short --timeout=60'
+    
+    steps:
+    - name: Checkout with submodules
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup Node.js
+      if: contains(matrix.name, 'TypeScript')
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Setup Python
+      if: contains(matrix.name, 'Python')
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Setup Go
+      if: contains(matrix.name, 'Go')
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        case "${{ matrix.name }}" in
+          *"TypeScript"*)
+            cd src/mcp-servers && npm install
+            ;;
+          *"Python"*)
+            python -m pip install --upgrade pip
+            pip install -e src/mcp-servers/context-persistence[dev]
+            ;;
+        esac
+
+    - name: Run integration tests
+      working-directory: ${{ matrix.path }}
+      run: |
+        echo "Running integration tests for ${{ matrix.name }}..."
+        ${{ matrix.test-command }}
+
+    - name: Upload integration test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: integration-test-results-${{ matrix.name }}
+        path: |
+          ${{ matrix.path }}/test-results/
+          ${{ matrix.path }}/integration-test-results/
+        retention-days: 7
+
+  # Performance Tests
+  performance-tests:
+    name: Performance Tests
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'performance' || github.event.inputs.test_type == ''
+    
+    steps:
+    - name: Checkout with submodules
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Install performance testing tools
+      run: |
+        npm install -g artillery
+        pip install pytest-benchmark locust
+
+    - name: Run Go server performance tests
+      working-directory: MCP_structure_design/mcp-servers-go
+      run: |
+        # Build servers first
+        make build
+        
+        # Test binary startup performance
+        for server in task-orchestrator search-aggregator skills-manager; do
+          if [ -f "dist/$server" ]; then
+            echo "Testing $server startup performance..."
+            time ./dist/$server &
+            PID=$!
+            sleep 2
+            kill $PID 2>/dev/null || true
+            wait $PID 2>/dev/null || true
+          fi
+        done
+
+    - name: Run TypeScript server performance tests
+      working-directory: src/mcp-servers
+      run: |
+        # Test build performance
+        for server in */; do
+          if [ -f "$server/package.json" ] && [ -f "$server/tsconfig.json" ]; then
+            echo "Testing build performance for $server"
+            cd "$server"
+            time npm run build --if-present
+            cd ..
+          fi
+        done
+
+    - name: Run Python performance tests
+      working-directory: src/mcp-servers/context-persistence
+      run: |
+        # Run performance benchmarks if they exist
+        if [ -d "tests/performance" ]; then
+          python -m pytest tests/performance -v --benchmark-only
+        else
+          echo "No performance tests found for context persistence"
+        fi
+
+    - name: Upload performance results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: performance-test-results
+        path: |
+          performance-results/
+          benchmark-results/
+        retention-days: 7
+
+  # End-to-End Tests
+  e2e-tests:
+    name: End-to-End Tests
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'e2e' || github.event.inputs.test_type == ''
+    
+    steps:
+    - name: Checkout with submodules
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Setup Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Install dependencies
+      run: |
+        # Install Node dependencies
+        chmod +x scripts/setup.sh
+        ./scripts/setup.sh
+        chmod +x scripts/install-mcp-servers.sh
+        ./scripts/install-mcp-servers.sh
+
+    - name: Run comprehensive E2E tests
+      working-directory: MCP_structure_design/mcp-servers-go
+      run: |
+        chmod +x scripts/test-all-mcp-servers.sh
+        ./scripts/test-all-mcp-servers.sh
+
+    - name: Run final E2E validation
+      working-directory: MCP_structure_design/mcp-servers-go
+      run: |
+        chmod +x scripts/final-e2e-test.sh
+        ./scripts/final-e2e-test.sh
+
+    - name: Upload E2E test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: e2e-test-results
+        path: |
+          /tmp/mcp-complete-test-*/
+          /tmp/mcp-final-test.log
+        retention-days: 7
+
+  # Security Tests
+  security-tests:
+    name: Security Tests
+    runs-on: ubuntu-latest
+    if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == ''
+    
+    steps:
+    - name: Checkout with submodules
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install security scanning tools
+      run: |
+        npm install -g npm-audit-resolver
+        pip install safety bandit
+
+    - name: Run Node.js security audit
+      run: |
+        echo "Running npm audit for all Node.js packages..."
+        find . -name "package.json" -not -path "./node_modules/*" -not -path "./.git/*" | while read pkg; do
+          dir=$(dirname "$pkg")
+          echo "Auditing $dir"
+          cd "$dir"
+          npm audit --audit-level moderate || true
+          cd - > /dev/null
+        done
+
+    - name: Run Python security scan
+      run: |
+        echo "Running safety check for Python dependencies..."
+        cd src/mcp-servers/context-persistence
+        safety check || true
+        
+        echo "Running bandit security linter..."
+        bandit -r src/ -f json -o bandit-report.json || true
+
+    - name: Run Go security scan
+      working-directory: MCP_structure_design/mcp-servers-go
+      run: |
+        echo "Running gosec security scanner..."
+        if command -v gosec >/dev/null 2>&1; then
+          gosec ./... || true
+        else
+          echo "gosec not available, skipping Go security scan"
+        fi
+
+    - name: Check for hardcoded secrets
+      run: |
+        echo "Scanning for hardcoded secrets..."
+        # Basic secret detection patterns
+        if grep -r -i "password\|secret\|token\|key.*=" --include="*.js,*.ts,*.py,*.go" --exclude-dir=node_modules --exclude-dir=.git .; then
+          echo "⚠️ Potential hardcoded secrets found"
+        else
+          echo "✅ No hardcoded secrets detected"
+        fi
+
+    - name: Upload security scan results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: security-scan-results
+        path: |
+          bandit-report.json
+          security-results/
+        retention-days: 7
+
+  # Test Results Summary
+  test-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, performance-tests, e2e-tests, security-tests]
+    if: always()
+    
+    steps:
+    - name: Download all test results
+      uses: actions/download-artifact@v3
+      with:
+        path: test-results
+
+    - name: Generate test summary
+      run: |
+        echo "# Test Summary Report" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Test Suite | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|------------|--------|" >> $GITHUB_STEP_SUMMARY
+        
+        # Check each job status
+        echo "| Unit Tests | ${{ needs.unit-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Integration Tests | ${{ needs.integration-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Performance Tests | ${{ needs.performance-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| E2E Tests | ${{ needs.e2e-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Security Tests | ${{ needs.security-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+        
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "## Test Artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "- Unit test results are available in the artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "- Integration test results are available in the artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "- Performance benchmarks are available in the artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "- E2E test logs are available in the artifacts" >> $GITHUB_STEP_SUMMARY
+        echo "- Security scan results are available in the artifacts" >> $GITHUB_STEP_SUMMARY
+
+    - name: Upload combined test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: combined-test-results
+        path: test-results/
+        retention-days: 7

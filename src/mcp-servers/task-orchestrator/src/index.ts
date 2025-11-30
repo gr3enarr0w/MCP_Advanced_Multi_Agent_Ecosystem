@@ -6,6 +6,10 @@
  * Core Capabilities:
  * - Task CRUD operations with DAG-based dependency tracking
  * - Multi-language code execution (Python, JavaScript, Bash, SQL)
+ * * - Intelligent task management (Phase 7 enhancements)
+ * - PRD parsing and task generation
+ * - Complexity analysis and effort estimation
+ * - AI-powered task expansion and selection
  * - Code quality analysis and security scanning
  * - Git commit linking for traceability
  * - Task graph visualization (JSON and Mermaid)
@@ -23,6 +27,12 @@ import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import initSqlJs, { Database } from 'sql.js';
 import { v4 as uuidv4 } from 'uuid';
+
+// Import Phase 7 components
+import { analyzeComplexity, estimateEffort } from './complexity-analyzer.js';
+import { parsePRD } from './prd-parser.js';
+import { expandTask } from './task-expander.js';
+import { getNextTask } from './task-selector.js';
 
 // Configuration
 const MCP_HOME = process.env.MCP_HOME || join(homedir(), '.mcp');
@@ -472,6 +482,7 @@ export { TaskDatabase, CodeExecutor };
 
 // Define MCP tools
 const tools: Tool[] = [
+  // Existing tools
   {
     name: 'create_task',
     description: 'Create a new task with optional dependencies and code execution environment',
@@ -575,6 +586,101 @@ const tools: Tool[] = [
         author: { type: 'string', description: 'Commit author' },
       },
       required: ['task_id', 'commit_hash'],
+    },
+  },
+  
+  // Phase 7 Enhancement Tools
+  {
+    name: 'parse_prd',
+    description: 'Parse Product Requirements Document (PRD) content into structured tasks and dependencies',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        content: { type: 'string', description: 'PRD markdown content to parse' },
+        project_id: { type: 'string', description: 'Project identifier for generated tasks', default: 'default-project' },
+        generate_tasks: { type: 'boolean', description: 'Enable automatic task generation', default: true },
+        analyze_dependencies: { type: 'boolean', description: 'Enable dependency analysis', default: true },
+        extract_user_stories: { type: 'boolean', description: 'Extract user stories from PRD', default: true },
+        parse_acceptance_criteria: { type: 'boolean', description: 'Parse acceptance criteria', default: true },
+        confidence_threshold: { type: 'number', description: 'Confidence threshold for parsing (0-1)', default: 0.7 },
+      },
+      required: ['content'],
+    },
+  },
+  {
+    name: 'analyze_complexity',
+    description: 'Analyze task complexity using multi-factor scoring including code volume, dependencies, and technical risk',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'number', description: 'Task ID to analyze' },
+        analyze_dependencies: { type: 'boolean', description: 'Enable file dependency analysis', default: true },
+        estimate_code_volume: { type: 'boolean', description: 'Enable code volume estimation', default: true },
+        assess_risk: { type: 'boolean', description: 'Enable technical risk assessment', default: true },
+        use_historical_data: { type: 'boolean', description: 'Enable historical data correlation', default: true },
+        project_root: { type: 'string', description: 'Base directory for analysis' },
+      },
+      required: ['task_id'],
+    },
+  },
+  {
+    name: 'expand_task',
+    description: 'AI-powered task expansion to generate subtasks, implementation steps, and test tasks',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'number', description: 'Task ID to expand' },
+        depth: { type: 'number', description: 'Maximum expansion depth', default: 2 },
+        max_depth: { type: 'number', description: 'Maximum expansion depth', default: 3 },
+        include_tests: { type: 'boolean', description: 'Include test task generation', default: true },
+        include_documentation: { type: 'boolean', description: 'Include documentation tasks', default: true },
+        include_implementation: { type: 'boolean', description: 'Include implementation guidance', default: true },
+        provider: { type: 'string', enum: ['openai', 'anthropic', 'auto'], description: 'LLM provider preference', default: 'auto' },
+        model: { type: 'string', description: 'Model to use for expansion' },
+        max_tokens: { type: 'number', description: 'Maximum tokens for LLM response', default: 2000 },
+        temperature: { type: 'number', description: 'Temperature for LLM creativity (0-2)', default: 0.7 },
+      },
+      required: ['task_id'],
+    },
+  },
+  {
+    name: 'get_next_task',
+    description: 'Find next optimal task based on dependencies, complexity constraints, and priority optimization',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        project_id: { type: 'string', description: 'Project ID to select tasks for' },
+        max_complexity: { type: 'number', description: 'Maximum complexity score allowed', default: 8 },
+        max_complexity_limit: { type: 'number', description: 'Maximum complexity threshold', default: 8 },
+        preferred_task_types: { type: 'array', items: { type: 'string' }, description: 'Preferred task types' },
+        preferred_languages: { type: 'array', items: { type: 'string' }, description: 'Preferred programming languages' },
+        excluded_tags: { type: 'array', items: { type: 'string' }, description: 'Excluded task tags' },
+        required_tags: { type: 'array', items: { type: 'string' }, description: 'Required task tags' },
+        max_estimated_hours: { type: 'number', description: 'Maximum estimated hours' },
+        min_estimated_hours: { type: 'number', description: 'Minimum estimated hours' },
+        priority_threshold: { type: 'number', description: 'Priority threshold' },
+        enable_grouping: { type: 'boolean', description: 'Enable grouping similar tasks', default: true },
+        minimize_context_switching: { type: 'boolean', description: 'Enable context switching minimization', default: true },
+        hours_available_today: { type: 'number', description: 'Available working hours today' },
+        available_developers: { type: 'number', description: 'Number of available developers' },
+      },
+      required: ['project_id'],
+    },
+  },
+  {
+    name: 'estimate_effort',
+    description: 'Estimate effort in hours for a task based on complexity analysis',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        task_id: { type: 'number', description: 'Task ID to estimate effort for' },
+        analyze_dependencies: { type: 'boolean', description: 'Enable file dependency analysis', default: true },
+        estimate_code_volume: { type: 'boolean', description: 'Enable code volume estimation', default: true },
+        assess_risk: { type: 'boolean', description: 'Enable technical risk assessment', default: true },
+        use_historical_data: { type: 'boolean', description: 'Enable historical data correlation', default: true },
+        project_root: { type: 'string', description: 'Base directory for analysis' },
+      },
+      required: ['task_id'],
     },
   },
 ];
@@ -792,6 +898,136 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             {
               type: 'text',
               text: JSON.stringify({ message: 'Git commit linked to task successfully' }, null, 2),
+            },
+          ],
+        };
+      }
+
+      // Phase 7 Enhancement Cases
+      case 'parse_prd': {
+        const parsedPRD = await parsePRD(
+          args?.content,
+          args?.project_id || 'default-project',
+          {
+            generateTasks: args?.generate_tasks ?? true,
+            analyzeDependencies: args?.analyze_dependencies ?? true,
+            extractUserStories: args?.extract_user_stories ?? true,
+            parseAcceptanceCriteria: args?.parse_acceptance_criteria ?? true,
+            confidenceThreshold: args?.confidence_threshold ?? 0.7,
+          }
+        );
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ prd: parsedPRD, message: 'PRD parsed successfully' }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'analyze_complexity': {
+        const analysis = await analyzeComplexity(
+          args?.task_id,
+          {
+            analyzeDependencies: args?.analyze_dependencies ?? true,
+            estimateCodeVolume: args?.estimate_code_volume ?? true,
+            assessRisk: args?.assess_risk ?? true,
+            useHistoricalData: args?.use_historical_data ?? true,
+            projectRoot: args?.project_root,
+          }
+        );
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ complexity: analysis, message: 'Complexity analysis completed' }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'expand_task': {
+        const expansion = await expandTask(
+          args?.task_id,
+          args?.depth || args?.max_depth || 2,
+          {
+            maxDepth: args?.max_depth || 3,
+            includeTests: args?.include_tests ?? true,
+            includeDocumentation: args?.include_documentation ?? true,
+            includeImplementation: args?.include_implementation ?? true,
+            provider: args?.provider || 'auto',
+            model: args?.model,
+            maxTokens: args?.max_tokens || 2000,
+            temperature: args?.temperature || 0.7,
+          }
+        );
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ expansion, message: 'Task expansion completed' }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'get_next_task': {
+        const selection = await getNextTask(
+          args?.project_id,
+          args?.max_complexity || args?.max_complexity_limit || 8,
+          {
+            maxComplexity: args?.max_complexity_limit || 8,
+            preferredTaskTypes: args?.preferred_task_types,
+            preferredLanguages: args?.preferred_languages,
+            excludedTags: args?.excluded_tags,
+            requiredTags: args?.required_tags,
+            maxEstimatedHours: args?.max_estimated_hours,
+            minEstimatedHours: args?.min_estimated_hours,
+            priorityThreshold: args?.priority_threshold,
+            flowOptimization: {
+              enableGrouping: args?.enable_grouping ?? true,
+              minimizeContextSwitching: args?.minimize_context_switching ?? true,
+            },
+            timeConstraints: {
+              hoursAvailableToday: args?.hours_available_today,
+            },
+            teamCapacity: {
+              availableDevelopers: args?.available_developers,
+            },
+          }
+        );
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ selection, message: 'Next task selected successfully' }, null, 2),
+            },
+          ],
+        };
+      }
+
+      case 'estimate_effort': {
+        const effort = await estimateEffort(
+          args?.task_id,
+          {
+            analyzeDependencies: args?.analyze_dependencies ?? true,
+            estimateCodeVolume: args?.estimate_code_volume ?? true,
+            assessRisk: args?.assess_risk ?? true,
+            useHistoricalData: args?.use_historical_data ?? true,
+            projectRoot: args?.project_root,
+          }
+        );
+
+        return {
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({ estimatedHours: effort, message: 'Effort estimation completed' }, null, 2),
             },
           ],
         };

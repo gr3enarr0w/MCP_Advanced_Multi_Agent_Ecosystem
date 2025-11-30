@@ -1,8 +1,12 @@
 # MCP Advanced Multi-Agent Ecosystem
 
+[![CI Pipeline](https://github.com/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/workflows/CI%20Pipeline/badge.svg)](https://github.com/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/actions/workflows/ci.yml)
+[![Comprehensive Testing](https://github.com/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/workflows/Comprehensive%20Testing/badge.svg)](https://github.com/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/actions/workflows/test.yml)
+[![Coverage](https://img.shields.io/codecov/c/github/ceverson/MCP_Advanced_Multi_Agent_Ecosystem?token=${{ secrets.CODECOV_TOKEN }})](https://codecov.io/gh/ceverson/MCP_Advanced_Multi_Agent_Ecosystem)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
-[![Node.js](https://img.shields.io/badge/node.js-18+-green.svg)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/node.js-20+-green.svg)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/typescript-5+-blue.svg)](https://www.typescriptlang.org/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A sophisticated, production-grade Model Context Protocol (MCP) ecosystem featuring advanced multi-agent orchestration, context persistence, and intelligent workflow automation. This ecosystem demonstrates enterprise-level multi-agent system architecture with local-first data storage and intelligent task delegation.
 
@@ -210,6 +214,57 @@ npm run test:performance
 ```
 
 E2E harness details and coverage: `docs/MCP_E2E_TESTING.md` (temp MCP_HOME, seeded task DB schema/defaults, cached search for offline runs).
+
+## 🔄 CI/CD Pipeline
+
+This project features a comprehensive CI/CD pipeline with automated testing, coverage reporting, and deployment validation:
+
+### Pipeline Components
+
+- **[CI Pipeline](.github/workflows/ci.yml)** - Main continuous integration with build verification and installation testing
+- **[Comprehensive Testing](.github/workflows/test.yml)** - Unit, integration, performance, and E2E testing with matrix strategy
+- **[Coverage Reporting](.github/workflows/coverage.yml)** - Code coverage analysis with threshold enforcement and reporting
+
+### Pipeline Features
+
+- ✅ **Multi-language Support**: Go, TypeScript, and Python 3.12
+- ✅ **Matrix Testing**: Parallel execution across all MCP servers
+- ✅ **Coverage Thresholds**: 80% minimum coverage requirement
+- ✅ **Artifact Management**: Automated build and test result storage
+- ✅ **Security Scanning**: Dependency vulnerability detection and secret scanning
+- ✅ **Performance Testing**: Startup time and benchmark validation
+- ✅ **E2E Validation**: Complete ecosystem integration testing
+
+### Pipeline Status
+
+- **Build Status**: ![CI Pipeline](https://github.com/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/workflows/CI%20Pipeline/badge.svg)
+- **Test Coverage**: ![Coverage](https://img.shields.io/codecov/c/github/ceverson/MCP_Advanced_Multi_Agent_Ecosystem?token=${{ secrets.CODECOV_TOKEN }})
+- **Test Results**: ![Comprehensive Testing](https://github.com/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/workflows/Comprehensive%20Testing/badge.svg)
+
+### Running Tests Locally
+
+```bash
+# Run all tests with coverage
+npm test
+
+# Run specific test suites
+npm run test:unit          # Unit tests only
+npm run test:integration   # Integration tests only
+npm run test:performance  # Performance benchmarks
+npm run test:e2e          # End-to-end tests
+
+# Run tests for specific server types
+npm run test:go           # Go servers
+npm run test:typescript    # TypeScript servers
+npm run test:python        # Python servers
+```
+
+### Coverage Requirements
+
+- **Minimum Coverage**: 80% across all codebases
+- **Coverage Tools**: Jest (TS), pytest (Python), go test (Go)
+- **Reporting**: LCOV format with Codecov integration
+- **Threshold Enforcement**: Pipeline fails if coverage drops below 80%
 
 ### Adding New MCP Servers
 

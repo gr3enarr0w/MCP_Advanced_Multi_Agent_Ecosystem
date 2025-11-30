@@ -1,0 +1,437 @@
+name: Coverage Reporting
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  schedule:
+    # Run coverage analysis daily at 3 AM UTC
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+  GO_VERSION: '1.21'
+  COVERAGE_THRESHOLD: '80'
+
+jobs:
+  # Generate coverage for all servers
+  generate-coverage:
+    name: Generate Coverage
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        include:
+          - name: 'Go Servers'
+            path: 'MCP_structure_design/mcp-servers-go'
+            coverage-command: 'go test -coverprofile=coverage.out -covermode=atomic ./...'
+            coverage-file: 'coverage.out'
+            coverage-type: 'go'
+          - name: 'TypeScript Servers'
+            path: 'src/mcp-servers'
+            coverage-command: 'npm run test:coverage --if-present'
+            coverage-file: 'coverage/lcov.info'
+            coverage-type: 'ts'
+          - name: 'Python Context Persistence'
+            path: 'src/mcp-servers/context-persistence'
+            coverage-command: 'python -m pytest --cov=src/context_persistence --cov-report=xml --cov-report=html --cov-report=lcov'
+            coverage-file: 'coverage.xml'
+            coverage-type: 'py'
+    
+    steps:
+    - name: Checkout with submodules
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Setup Node.js
+      if: matrix.coverage-type == 'ts'
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+        cache: 'npm'
+
+    - name: Setup Python
+      if: matrix.coverage-type == 'py'
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        cache: 'pip'
+
+    - name: Setup Go
+      if: matrix.coverage-type == 'go'
+      uses: actions/setup-go@v4
+      with:
+        go-version: ${{ env.GO_VERSION }}
+
+    - name: Install coverage tools
+      run: |
+        case "${{ matrix.coverage-type }}" in
+          "ts")
+            npm install -g nyc
+            ;;
+          "py")
+            python -m pip install coverage pytest-cov
+            ;;
+          "go")
+            go install github.com/wadey/gocovmerge@latest
+            ;;
+        esac
+
+    - name: Install dependencies
+      run: |
+        case "${{ matrix.coverage-type }}" in
+          "ts")
+            cd src/mcp-servers && npm install
+            ;;
+          "py")
+            python -m pip install --upgrade pip
+            pip install -e src/mcp-servers/context-persistence[dev]
+            ;;
+          "go")
+            # Go modules are handled automatically
+            ;;
+        esac
+
+    - name: Generate coverage
+      working-directory: ${{ matrix.path }}
+      run: |
+        echo "Generating coverage for ${{ matrix.name }}..."
+        ${{ matrix.coverage-command }}
+
+    - name: Process coverage files
+      working-directory: ${{ matrix.path }}
+      run: |
+        case "${{ matrix.coverage-type }}" in
+          "go")
+            # Convert Go coverage to lcov
+            go tool cover -html=coverage.out -o coverage.html
+            gocovmerge coverage.out > merged-coverage.out
+            ;;
+          "ts")
+            # TypeScript coverage is already in lcov format
+            echo "TypeScript coverage generated"
+            ;;
+          "py")
+            # Python coverage is already in multiple formats
+            echo "Python coverage generated"
+            ;;
+        esac
+
+    - name: Upload coverage artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-${{ matrix.coverage-type }}
+        path: |
+          ${{ matrix.path }}/coverage/
+          ${{ matrix.path }}/coverage.out
+          ${{ matrix.path }}/coverage.html
+          ${{ matrix.path }}/coverage.xml
+          ${{ matrix.path }}/coverage.lcov
+          ${{ matrix.path }}/lcov.info
+        retention-days: 7
+
+  # Merge and analyze coverage
+  merge-coverage:
+    name: Merge Coverage
+    runs-on: ubuntu-latest
+    needs: generate-coverage
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ env.NODE_VERSION }}
+
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+
+    - name: Install coverage tools
+      run: |
+        npm install -g lcovmerge
+        pip install coverage
+
+    - name: Download all coverage artifacts
+      uses: actions/download-artifact@v3
+      with:
+        path: coverage-artifacts
+
+    - name: Merge coverage reports
+      run: |
+        mkdir -p merged-coverage
+        
+        # Find and merge lcov files
+        find coverage-artifacts -name "*.lcov" -o -name "lcov.info" | while read file; do
+          echo "Processing $file"
+          cp "$file" merged-coverage/
+        done
+        
+        # Merge lcov files if multiple exist
+        if [ $(find merged-coverage -name "*.lcov" -o -name "lcov.info" | wc -l) -gt 1 ]; then
+          lcovmerge merged-coverage/*.lcov merged-coverage/combined.lcov
+        elif [ -f merged-coverage/coverage.lcov ]; then
+          mv merged-coverage/coverage.lcov merged-coverage/combined.lcov
+        elif [ -f merged-coverage/lcov.info ]; then
+          mv merged-coverage/lcov.info merged-coverage/combined.lcov
+        fi
+        
+        # Convert XML coverage to a common format for Python
+        find coverage-artifacts -name "coverage.xml" | while read file; do
+          echo "Processing XML coverage: $file"
+          cp "$file" merged-coverage/
+        done
+        
+        # Generate summary
+        echo "Coverage files collected:"
+        ls -la merged-coverage/
+
+    - name: Generate coverage summary
+      run: |
+        cd merged-coverage
+        
+        # Generate coverage summary if lcov exists
+        if [ -f "combined.lcov" ]; then
+          echo "## Coverage Summary" >> ../coverage-summary.md
+          echo "" >> ../coverage-summary.md
+          
+          # Extract coverage percentages using lcov
+          if command -v lcov >/dev/null 2>&1; then
+            lcov --summary combined.lcov > coverage-summary.txt 2>&1 || true
+            echo "### LCOV Coverage Details" >> ../coverage-summary.md
+            echo '```' >> ../coverage-summary.md
+            cat coverage-summary.txt >> ../coverage-summary.md
+            echo '```' >> ../coverage-summary.md
+          fi
+        fi
+        
+        # Check coverage thresholds
+        if [ -f "combined.lcov" ]; then
+          # Extract line coverage percentage (basic parsing)
+          LINE_COVERAGE=$(grep -o 'lines......: [0-9.]*%' combined.lcov | head -1 | grep -o '[0-9.]*' || echo "0")
+          echo "Line coverage: $LINE_COVERAGE%"
+          
+          if (( $(echo "$LINE_COVERAGE >= ${{ env.COVERAGE_THRESHOLD }}" | bc -l) )); then
+            echo "✅ Coverage threshold met: $LINE_COVERAGE% >= ${{ env.COVERAGE_THRESHOLD }}%"
+            echo "✅ Coverage threshold met: $LINE_COVERAGE% >= ${{ env.COVERAGE_THRESHOLD }}%" >> ../coverage-summary.md
+          else
+            echo "❌ Coverage threshold not met: $LINE_COVERAGE% < ${{ env.COVERAGE_THRESHOLD }}%"
+            echo "❌ Coverage threshold not met: $LINE_COVERAGE% < ${{ env.COVERAGE_THRESHOLD }}%" >> ../coverage-summary.md
+            exit 1
+          fi
+        fi
+
+    - name: Upload merged coverage
+      uses: actions/upload-artifact@v3
+      with:
+        name: merged-coverage
+        path: |
+          merged-coverage/
+          coverage-summary.md
+        retention-days: 7
+
+  # Upload to Codecov
+  upload-codecov:
+    name: Upload to Codecov
+    runs-on: ubuntu-latest
+    needs: merge-coverage
+    if: github.event_name == 'push' || github.event_name == 'pull_request'
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Download merged coverage
+      uses: actions/download-artifact@v3
+      with:
+        name: merged-coverage
+        path: coverage
+
+    - name: Upload to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        files: ./coverage/combined.lcov,./coverage/coverage.xml
+        flags: unittests
+        name: mcp-ecosystem-coverage
+        fail_ci_if_error: true
+        verbose: true
+        token: ${{ secrets.CODECOV_TOKEN }}
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # Generate coverage badges
+  coverage-badges:
+    name: Coverage Badges
+    runs-on: ubuntu-latest
+    needs: merge-coverage
+    if: github.ref == 'refs/heads/main'
+    
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Download merged coverage
+      uses: actions/download-artifact@v3
+      with:
+        name: merged-coverage
+        path: coverage
+
+    - name: Generate coverage badges
+      run: |
+        # Install badge generation tool
+        npm install -g badge-maker
+        
+        cd coverage
+        
+        # Extract coverage percentage
+        if [ -f "combined.lcov" ]; then
+          LINE_COVERAGE=$(grep -o 'lines......: [0-9.]*%' combined.lcov | head -1 | grep -o '[0-9.]*' || echo "0")
+          
+          # Generate badge
+          if (( $(echo "$LINE_COVERAGE >= ${{ env.COVERAGE_THRESHOLD }}" | bc -l) )); then
+            COLOR="brightgreen"
+            STATUS="passing"
+          else
+            COLOR="red"
+            STATUS="failing"
+          fi
+          
+          badge-maker \
+            --subject "coverage" \
+            --status "${LINE_COVERAGE}%" \
+            --color "$COLOR" \
+            --output "coverage.svg"
+          
+          echo "Coverage badge generated: ${LINE_COVERAGE}%"
+        else
+          echo "No coverage data found for badge generation"
+        fi
+
+    - name: Upload coverage badge
+      uses: actions/upload-artifact@v3
+      with:
+        name: coverage-badge
+        path: coverage/coverage.svg
+        retention-days: 30
+
+    - name: Update README with coverage badge
+      if: github.ref == 'refs/heads/main'
+      run: |
+        if [ -f "coverage/coverage.svg" ]; then
+          # Extract coverage percentage for badge URL
+          LINE_COVERAGE=$(grep -o 'lines......: [0-9.]*%' coverage/combined.lcov | head -1 | grep -o '[0-9.]*' || echo "0")
+          
+          # Update README with coverage badge (basic implementation)
+          echo "Coverage badge would be updated in README.md"
+          echo "Coverage: $LINE_COVERAGE%"
+        fi
+
+  # Coverage Report PR Comment
+  pr-comment:
+    name: PR Coverage Comment
+    runs-on: ubuntu-latest
+    needs: merge-coverage
+    if: github.event_name == 'pull_request'
+    
+    steps:
+    - name: Download merged coverage
+      uses: actions/download-artifact@v3
+      with:
+        name: merged-coverage
+        path: coverage
+
+    - name: Comment on PR
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          
+          // Read coverage summary
+          let coverageComment = '## 📊 Coverage Report\n\n';
+          
+          if (fs.existsSync('coverage/coverage-summary.md')) {
+            const summary = fs.readFileSync('coverage/coverage-summary.md', 'utf8');
+            coverageComment += summary + '\n';
+          } else {
+            coverageComment += 'No coverage data available.\n\n';
+          }
+          
+          // Add coverage badge info
+          coverageComment += '### 📈 Coverage Details\n';
+          coverageComment += '- Coverage reports are available in the workflow artifacts\n';
+          coverageComment += '- Full coverage details will be uploaded to Codecov\n';
+          
+          // Find existing comment
+          const { data: comments } = await github.rest.issues.listComments({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+          });
+          
+          const existingComment = comments.find(comment => 
+            comment.user.type === 'Bot' && 
+            comment.body.includes('📊 Coverage Report')
+          );
+          
+          if (existingComment) {
+            // Update existing comment
+            await github.rest.issues.updateComment({
+              comment_id: existingComment.id,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: coverageComment,
+            });
+          } else {
+            // Create new comment
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: coverageComment,
+            });
+          }
+
+  # Coverage Threshold Check
+  threshold-check:
+    name: Coverage Threshold Check
+    runs-on: ubuntu-latest
+    needs: merge-coverage
+    if: always()
+    
+    steps:
+    - name: Download merged coverage
+      uses: actions/download-artifact@v3
+      with:
+        name: merged-coverage
+        path: coverage
+
+    - name: Check coverage thresholds
+      run: |
+        cd coverage
+        
+        if [ -f "combined.lcov" ]; then
+          # Extract line coverage percentage
+          LINE_COVERAGE=$(grep -o 'lines......: [0-9.]*%' combined.lcov | head -1 | grep -o '[0-9.]*' || echo "0")
+          
+          echo "Final coverage: $LINE_COVERAGE%"
+          echo "Required threshold: ${{ env.COVERAGE_THRESHOLD }}%"
+          
+          if (( $(echo "$LINE_COVERAGE >= ${{ env.COVERAGE_THRESHOLD }}" | bc -l) )); then
+            echo "✅ PASSED: Coverage threshold met"
+            exit 0
+          else
+            echo "❌ FAILED: Coverage threshold not met"
+            echo "Current: $LINE_COVERAGE%, Required: ${{ env.COVERAGE_THRESHOLD }}%"
+            exit 1
+          fi
+        else
+          echo "❌ FAILED: No coverage data found"
+          exit 1
+        fi
