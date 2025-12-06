@@ -3,14 +3,17 @@ package routing
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/gr3enarr0w/mcp-ecosystem/nanogpt-proxy/backends"
+	"github.com/gr3enarr0w/mcp-ecosystem/nanogpt-proxy/subscription"
 )
 
 // ModelRouter selects the best model for each role
 type ModelRouter struct {
-	rankings *ModelRankings
-	backends map[string]backends.Backend
+	rankings     *ModelRankings
+	backends     map[string]backends.Backend
+	subscription *subscription.Manager
 }
 
 // ModelSelection represents the result of model selection
@@ -23,19 +26,62 @@ type ModelSelection struct {
 
 // NewModelRouter creates a new model router
 func NewModelRouter(rankingsPath string, backendMap map[string]backends.Backend) (*ModelRouter, error) {
+	return NewModelRouterWithSubscription(rankingsPath, backendMap, "", 0)
+}
+
+// NewModelRouterWithSubscription creates a new model router with subscription service
+func NewModelRouterWithSubscription(rankingsPath string, backendMap map[string]backends.Backend, subscriptionBaseURL string, subscriptionTTLSeconds int) (*ModelRouter, error) {
 	rankings, err := LoadRankings(rankingsPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load rankings: %w", err)
 	}
 
+	var subMgr *subscription.Manager
+	if subscriptionBaseURL != "" {
+		ttl := time.Duration(subscriptionTTLSeconds) * time.Second
+		if ttl <= 0 {
+			ttl = 2 * time.Minute // Use same default as subscription package
+		}
+		subMgr = subscription.NewManager(subscriptionBaseURL, subscription.WithCacheTTL(ttl))
+		log.Printf("[ROUTER] Subscription service initialized with URL: %s, TTL: %v", subscriptionBaseURL, ttl)
+	} else {
+		log.Println("[ROUTER] Subscription service disabled (no base URL provided)")
+	}
+
 	return &ModelRouter{
-		rankings: rankings,
-		backends: backendMap,
+		rankings:     rankings,
+		backends:     backendMap,
+		subscription: subMgr,
 	}, nil
 }
 
 // SelectForRole chooses the best model for a given role
 func (mr *ModelRouter) SelectForRole(role, profile string) *ModelSelection {
+	// First, try subscription service if available
+	if mr.subscription != nil {
+		if subSel, err := mr.subscription.GetNextModel(role); err == nil && subSel != nil {
+			// Check if the selected subscription model is available in the requested backend
+			if backend, ok := mr.backends[profile]; ok && backend != nil && backend.HasModel(subSel.Model.ID) {
+				// Mark the model as exhausted immediately to prevent reuse
+				mr.subscription.MarkExhausted(subSel.Model.ID)
+				log.Printf("[ROUTER] Selected subscription model '%s' for role '%s' via profile '%s'", subSel.Model.ID, role, profile)
+				return &ModelSelection{
+					ModelID:  subSel.Model.ID,
+					Backend:  profile,
+					Reason:   "subscription model selected",
+					Fallback: false,
+				}
+			}
+			// If the backend doesn't have the model, mark it exhausted and continue
+			mr.subscription.MarkExhausted(subSel.Model.ID)
+			log.Printf("[ROUTER] Subscription model '%s' not available in backend '%s', marked exhausted", subSel.Model.ID, profile)
+		} else if err != nil {
+			log.Printf("[ROUTER] Subscription service error for role '%s': %v, continuing with fallback logic", role, err)
+		} else {
+			log.Printf("[ROUTER] No subscription models available for role '%s', continuing with fallback logic", role)
+		}
+	}
+
 	// Get role preferences from rankings
 	roleRanking := mr.rankings.GetRole(role)
 	if roleRanking == nil {

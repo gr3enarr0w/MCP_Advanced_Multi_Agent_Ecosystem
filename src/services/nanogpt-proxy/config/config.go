@@ -16,8 +16,10 @@ type Config struct {
 	MonthlyQuota      int    // NanoGPT monthly quota in tokens
 	DBPath            string
 	PromptStrategies  string
-	ModelRankingsPath string
-	MCPServers        map[string]MCPServerConfig
+	ModelRankingsPath        string
+	SubscriptionAPIBaseURL   string
+	SubscriptionAPITTLSeconds int
+	MCPServers               map[string]MCPServerConfig
 }
 
 // MCPServerConfig defines configuration for an MCP server connection
@@ -50,13 +52,17 @@ func Load() *Config {
 		ActiveProfile:     profile,
 		MonthlyQuota:      quota,
 		DBPath:            getEnv("DB_PATH", "~/.mcp/proxy/usage.db"),
-		PromptStrategies:  getEnv("PROMPT_STRATEGIES", "config/prompt_strategies.yaml"),
-		ModelRankingsPath: getEnv("MODEL_RANKINGS", "data/model_routing.json"),
+		PromptStrategies:          getEnv("PROMPT_STRATEGIES", "config/prompt_strategies.yaml"),
+		ModelRankingsPath:         getEnv("MODEL_RANKINGS", "data/model_routing.json"),
+		SubscriptionAPIBaseURL:    getEnv("SUBSCRIPTION_API_BASE_URL", "https://subscription.nano-gpt.com/api/v1"),
+		SubscriptionAPITTLSeconds: getEnvInt("SUBSCRIPTION_API_TTL_SECONDS", 60),
 		MCPServers: map[string]MCPServerConfig{
 			"context-persistence": {
-				Command: "python3",
+				Command: "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/src/mcp-servers/context-persistence/venv3.12/bin/python3",
 				Args:    []string{"-m", "context_persistence.server"},
-				Env:     map[string]string{},
+				Env: map[string]string{
+					"PYTHONPATH": "/Users/ceverson/MCP_Advanced_Multi_Agent_Ecosystem/src/mcp-servers/context-persistence/src",
+				},
 			},
 		},
 	}
@@ -65,6 +71,15 @@ func Load() *Config {
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
+	}
+	return defaultValue
+}
+
+func getEnvInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if parsed, err := strconv.Atoi(value); err == nil {
+			return parsed
+		}
 	}
 	return defaultValue
 }

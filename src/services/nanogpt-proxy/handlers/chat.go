@@ -9,6 +9,7 @@ import (
 
 	"github.com/gr3enarr0w/mcp-ecosystem/nanogpt-proxy/backends"
 	"github.com/gr3enarr0w/mcp-ecosystem/nanogpt-proxy/promptengineer"
+	"github.com/gr3enarr0w/mcp-ecosystem/nanogpt-proxy/routing"
 	"github.com/gr3enarr0w/mcp-ecosystem/nanogpt-proxy/storage"
 )
 
@@ -19,6 +20,7 @@ type ChatHandler struct {
 	activeProfile  string
 	usageTracker   *storage.UsageTracker
 	promptEngineer *promptengineer.PromptEngineer
+	modelRouter    *routing.ModelRouter
 }
 
 // NewChatHandler creates a new chat handler
@@ -28,6 +30,7 @@ func NewChatHandler(
 	activeProfile string,
 	tracker *storage.UsageTracker,
 	engineer *promptengineer.PromptEngineer,
+	modelRouter *routing.ModelRouter,
 ) *ChatHandler {
 	return &ChatHandler{
 		nanogptBackend: nanogpt,
@@ -35,6 +38,7 @@ func NewChatHandler(
 		activeProfile:  activeProfile,
 		usageTracker:   tracker,
 		promptEngineer: engineer,
+		modelRouter:    modelRouter,
 	}
 }
 
@@ -111,17 +115,34 @@ func (h *ChatHandler) HandleChatCompletion(w http.ResponseWriter, r *http.Reques
 // selectBackend chooses which backend to use
 func (h *ChatHandler) selectBackend(r *http.Request, req backends.ChatRequest) backends.Backend {
 	// Check for profile override in headers
-	if profile := r.Header.Get("X-Profile"); profile != "" {
-		if profile == "work" && h.vertexBackend != nil {
+	profile := h.activeProfile
+	if headerProfile := r.Header.Get("X-Profile"); headerProfile != "" {
+		profile = headerProfile
+	}
+
+	// Normalize profile names
+	if profile == "work" {
+		profile = "vertex"
+	} else if profile == "personal" {
+		profile = "nanogpt"
+	}
+
+	// Use ModelRouter for subscription-first routing if available
+	if h.modelRouter != nil {
+		selection := h.modelRouter.SelectForRole(req.Role, profile)
+		log.Printf("[INFO] ModelRouter selected backend '%s' with model '%s' for role '%s' (reason: %s)",
+			selection.Backend, selection.ModelID, req.Role, selection.Reason)
+		
+		// Return the selected backend
+		if selection.Backend == "vertex" && h.vertexBackend != nil {
 			return h.vertexBackend
-		}
-		if profile == "personal" && h.nanogptBackend != nil {
+		} else if selection.Backend == "nanogpt" && h.nanogptBackend != nil {
 			return h.nanogptBackend
 		}
 	}
 
-	// Use configured active profile
-	if h.activeProfile == "work" && h.vertexBackend != nil {
+	// Fallback to simple profile-based routing if ModelRouter fails
+	if profile == "vertex" && h.vertexBackend != nil {
 		return h.vertexBackend
 	}
 
@@ -130,7 +151,7 @@ func (h *ChatHandler) selectBackend(r *http.Request, req backends.ChatRequest) b
 		return h.nanogptBackend
 	}
 
-	// Fallback to Vertex if NanoGPT not available
+	// Final fallback to Vertex if NanoGPT not available
 	return h.vertexBackend
 }
 

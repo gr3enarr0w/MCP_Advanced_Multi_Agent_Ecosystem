@@ -85,11 +85,16 @@ func main() {
 		"nanogpt": nanogptBackend,
 		"vertex":  vertexBackend,
 	}
-	_, err = routing.NewModelRouter(cfg.ModelRankingsPath, backendMap)
+	modelRouter, err := routing.NewModelRouterWithSubscription(cfg.ModelRankingsPath, backendMap, cfg.SubscriptionAPIBaseURL, cfg.SubscriptionAPITTLSeconds)
 	if err != nil {
 		log.Printf("⚠ Failed to initialize model router: %v", err)
+		modelRouter = nil // Set to nil so ChatHandler can fallback to simple routing
 	} else {
-		log.Println("✓ Model Router initialized (8 roles configured)")
+		if cfg.SubscriptionAPIBaseURL != "" {
+			log.Println("✓ Model Router initialized (8 roles configured) with subscription service")
+		} else {
+			log.Println("✓ Model Router initialized (8 roles configured) without subscription service")
+		}
 	}
 
 	// Initialize MCP clients (Phase 4)
@@ -138,6 +143,7 @@ func main() {
 		cfg.ActiveProfile,
 		usageTracker,
 		promptEngineer,
+		modelRouter,
 	)
 
 	modelsHandler := handlers.NewModelsHandler(
