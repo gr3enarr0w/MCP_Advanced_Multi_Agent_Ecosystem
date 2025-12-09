@@ -20,8 +20,8 @@ import (
 	"github.com/gr3enarr0w/mcp-ecosystem/nanogpt-proxy/storage"
 )
 
-func main() {
-	log.Println("Starting NanoGPT Proxy Server...")
+func mainDebug() {
+	log.Println("Starting NanoGPT Proxy Server (DEBUG MODE)...")
 
 	// Load configuration
 	cfg := config.Load()
@@ -140,14 +140,14 @@ func main() {
 		}
 	}
 
-	// Initialize handlers
-	chatHandler := handlers.NewChatHandler(
+	// Initialize DEBUG ChatHandler with enhanced diagnostics
+	chatHandler := handlers.NewChatHandlerDebug(
 		nanogptBackend,
 		vertexBackend,
 		cfg.ActiveProfile,
 		usageTracker,
 		promptEngineer,
-		modelRouter, // FIXED: Pass ModelRouter to ChatHandler
+		modelRouter, // FIXED: Pass ModelRouter to ChatHandlerDebug
 	)
 
 	modelsHandler := handlers.NewModelsHandler(
@@ -213,7 +213,7 @@ func main() {
 
 	// Start server
 	addr := ":" + cfg.Port
-	log.Printf("✓ Server starting on http://localhost%s", addr)
+	log.Printf("✓ DEBUG Server starting on http://localhost%s", addr)
 	log.Printf("  Active profile: %s", cfg.ActiveProfile)
 	log.Printf("  OpenAI-compatible endpoint: http://localhost%s/v1", addr)
 
@@ -233,15 +233,14 @@ func main() {
 		}
 	}()
 
-	log.Println("✓ NanoGPT Proxy is ready to accept requests")
+	log.Println("✓ NanoGPT Proxy (DEBUG MODE) is ready to accept requests")
 	log.Println("")
 	log.Println("========================================")
-	log.Println("SMART PROXY FEATURES ENABLED:")
-	log.Println("  ✓ Phase 1: OpenAI-compatible API")
-	log.Println("  ✓ Phase 2: Prompt Engineer (role-based optimization)")
-	log.Println("  ✓ Phase 3: Model Router (auto-select best model)")
-	log.Println("  ✓ Phase 4: Context Manager (conversation history)")
-	log.Println("  ✓ Phase 5: Monthly Research (auto-evaluate new models)")
+	log.Println("DEBUG MODE FEATURES ENABLED:")
+	log.Println("  ✓ Enhanced diagnostic logging")
+	log.Println("  ✓ [AUTH], [PROFILE], [ROUTING], [FALLBACK], [DIAGNOSTIC] markers")
+	log.Println("  ✓ ModelRouter integration validation")
+	log.Println("  ✓ Subscription-first routing verification")
 	log.Println("========================================")
 	log.Println("")
 

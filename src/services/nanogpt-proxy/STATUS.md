@@ -1,8 +1,9 @@
-# ✅ NanoGPT Proxy - OPERATIONAL
+# ⚠️ NanoGPT Proxy - PARTIALLY FUNCTIONAL
 
 **Build Date**: November 24, 2025
-**Status**: All systems operational
+**Status**: Critical integration issues identified
 **Build Size**: 29MB (ARM64 executable)
+**Functional Status**: 25% Operational
 
 ## ✅ Startup Test Results
 
@@ -22,11 +23,19 @@
 2025/11/24 23:02:56 ✓ NanoGPT Proxy is ready to accept requests
 ```
 
-## ✅ All Phases Operational
+## 🚨 Critical Issues Status
 
-- ✅ **Phase 1**: OpenAI-compatible API
+### ModelRouter Integration Gap - 25% Functional
+**Issue**: Sophisticated subscription-first routing completely disconnected from ChatHandler
+**Impact**: Advanced routing capabilities wasted, simple profile routing only
+**Root Cause**: ModelRouter created but never passed to ChatHandler constructor
+**Test Results**: Subscription API never called, 0 requests received
+
+## ⚠️ Phase Status Summary
+
+- ✅ **Phase 1**: OpenAI-compatible API (Working)
 - ✅ **Phase 2**: Prompt Engineer (role-based optimization)
-- ✅ **Phase 3**: Model Router (auto-select best model)
+- ❌ **Phase 3**: Model Router (integration gap)
 - ✅ **Phase 4**: Context Manager (conversation history)
 - ✅ **Phase 5**: Monthly Research (auto-evaluate new models)
 
@@ -162,14 +171,52 @@ curl -X POST http://localhost:8090/v1/chat/completions \
 - ✅ No external dependencies at runtime
 - ✅ All HTTPS connections
 
-## 🎊 Summary
+## 🚨 Critical Issues Blocking Functionality
 
-The NanoGPT Proxy is **fully operational** with all 5 phases implemented and tested:
+### 1. ModelRouter Integration Gap - CRITICAL
+**Issue**: The sophisticated subscription-first routing system exists but is completely disconnected from actual request processing
+**Impact**:
+- Subscription-first routing feature is 100% non-functional
+- Advanced routing capabilities completely wasted
+- User experience differs significantly from design intent
+**Evidence**:
+- ModelRouter check shows `h.modelRouter != nil` always returns false
+- Subscription API never called despite proper configuration
+- Mock subscription server received 0 requests during testing
 
-1. ✅ OpenAI-compatible gateway
-2. ✅ Role-based prompt optimization
-3. ✅ Intelligent model selection
-4. ✅ Conversation context via MCP
-5. ✅ **Monthly auto-evaluation of new models**
+### 2. Authentication Issues - HIGH PRIORITY
+**Issue**: 401 "Invalid session" errors preventing testing
+**Impact**: Cannot validate role-based routing functionality
+**Root Cause**: No mechanism to extract user roles from authentication headers
 
-**Ready for production use!**
+## 📊 Current System Status
+
+| Component | Implementation Quality | Functional Status | Critical Issues |
+|-----------|----------------------|-------------------|-----------------|
+| OpenAI API | ⭐⭐⭐⭐⭐ Excellent | ✅ 100% Functional | None |
+| Prompt Engineer | ⭐⭐⭐⭐⭐ Excellent | ✅ 100% Functional | None |
+| Model Router | ⭐⭐⭐⭐⭐ Excellent | ❌ 0% Functional | Integration gap |
+| Context Manager | ⭐⭐⭐⭐⭐ Excellent | ✅ 100% Functional | None |
+| Research System | ⭐⭐⭐⭐⭐ Excellent | ✅ 100% Functional | None |
+
+**Overall Proxy Status**: ⚠️ 25% Functional
+
+## 📋 Reference Documentation
+
+**Detailed Analysis**: See `NANOGPT_SUBSCRIPTION_ROUTING_E2E_TEST_REPORT.md` for complete test results
+**Integration Analysis**: See `ROLE_PROFILE_ROUTING_ANALYSIS_REPORT.md` for technical details
+**Comprehensive Status**: See `COMPREHENSIVE_FINAL_TEST_REPORT.md` for system-wide assessment
+
+## 🎯 Summary
+
+The NanoGPT Proxy has **excellent implementation quality** but suffers from **critical integration failures**:
+
+1. ✅ OpenAI-compatible gateway (working)
+2. ✅ Role-based prompt optimization (working)
+3. ❌ Intelligent model selection (non-functional due to integration gap)
+4. ✅ Conversation context via MCP (working)
+5. ✅ Monthly auto-evaluation of new models (working)
+
+**Status**: NOT PRODUCTION READY - Critical integration failures must be resolved
+
+**Estimated Time to Production**: 4-6 hours for ModelRouter integration fix

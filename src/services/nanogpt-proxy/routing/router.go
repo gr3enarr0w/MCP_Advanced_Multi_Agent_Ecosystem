@@ -57,21 +57,51 @@ func NewModelRouterWithSubscription(rankingsPath string, backendMap map[string]b
 
 // SelectForRole chooses the best model for a given role
 func (mr *ModelRouter) SelectForRole(role, profile string) *ModelSelection {
+	log.Printf("[DEBUG] SelectForRole called - Role: %s, Profile: %s, Subscription service available: %t",
+		role, profile, mr.subscription != nil)
+	
 	// First, try subscription service if available
 	if mr.subscription != nil {
+		log.Printf("[DEBUG] Attempting to get subscription model for role '%s'", role)
 		if subSel, err := mr.subscription.GetNextModel(role); err == nil && subSel != nil {
+			log.Printf("[DEBUG] Subscription service returned model '%s' for role '%s'", subSel.Model.ID, role)
+			
 			// Check if the selected subscription model is available in the requested backend
-			if backend, ok := mr.backends[profile]; ok && backend != nil && backend.HasModel(subSel.Model.ID) {
-				// Mark the model as exhausted immediately to prevent reuse
-				mr.subscription.MarkExhausted(subSel.Model.ID)
-				log.Printf("[ROUTER] Selected subscription model '%s' for role '%s' via profile '%s'", subSel.Model.ID, role, profile)
-				return &ModelSelection{
-					ModelID:  subSel.Model.ID,
-					Backend:  profile,
-					Reason:   "subscription model selected",
-					Fallback: false,
+			if backend, ok := mr.backends[profile]; ok && backend != nil {
+				hasModel := backend.HasModel(subSel.Model.ID)
+				log.Printf("[DEBUG] Backend '%s' has model '%s': %t", profile, subSel.Model.ID, hasModel)
+				
+				if hasModel {
+					// Mark the model as exhausted immediately to prevent reuse
+					mr.subscription.MarkExhausted(subSel.Model.ID)
+					log.Printf("[ROUTER] Selected subscription model '%s' for role '%s' via profile '%s'", subSel.Model.ID, role, profile)
+					return &ModelSelection{
+						ModelID:  subSel.Model.ID,
+						Backend:  profile,
+						Reason:   "subscription model selected",
+						Fallback: false,
+					}
+				} else {
+					log.Printf("[DEBUG] Backend '%s' exists but does not have model '%s'", profile, subSel.Model.ID)
+					// Try to find alternative backend that has this model
+					for altProfile, altBackend := range mr.backends {
+						if altBackend != nil && altBackend.HasModel(subSel.Model.ID) {
+							log.Printf("[DEBUG] Found alternative backend '%s' with model '%s'", altProfile, subSel.Model.ID)
+							mr.subscription.MarkExhausted(subSel.Model.ID)
+							return &ModelSelection{
+								ModelID:  subSel.Model.ID,
+								Backend:  altProfile,
+								Reason:   "subscription model selected (alternative backend)",
+								Fallback: false,
+							}
+						}
+					}
+					log.Printf("[DEBUG] No backend found with model '%s'", subSel.Model.ID)
 				}
+			} else {
+				log.Printf("[DEBUG] Backend '%s' not available or nil", profile)
 			}
+			
 			// If the backend doesn't have the model, mark it exhausted and continue
 			mr.subscription.MarkExhausted(subSel.Model.ID)
 			log.Printf("[ROUTER] Subscription model '%s' not available in backend '%s', marked exhausted", subSel.Model.ID, profile)
@@ -80,6 +110,8 @@ func (mr *ModelRouter) SelectForRole(role, profile string) *ModelSelection {
 		} else {
 			log.Printf("[ROUTER] No subscription models available for role '%s', continuing with fallback logic", role)
 		}
+	} else {
+		log.Printf("[DEBUG] Subscription service not available, using fallback logic")
 	}
 
 	// Get role preferences from rankings
@@ -117,6 +149,8 @@ func (mr *ModelRouter) SelectForRole(role, profile string) *ModelSelection {
 			Fallback: true,
 		}
 	}
+	
+	log.Printf("[DEBUG] Using backend '%s' for fallback model selection", profile)
 
 	// Try primary model first
 	if backend.HasModel(roleRanking.Primary.Model) {

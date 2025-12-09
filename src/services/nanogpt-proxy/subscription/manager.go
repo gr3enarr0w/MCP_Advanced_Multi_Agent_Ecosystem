@@ -104,7 +104,10 @@ func (m *Manager) Refresh(ctx context.Context) error {
 }
 
 func (m *Manager) getNextModel(ctx context.Context, role string) (*ModelSelection, error) {
+	log.Printf("[DEBUG] getNextModel called for role: %s", role)
+	
 	if err := m.ensureCache(ctx); err != nil {
+		log.Printf("[DEBUG] ensureCache failed: %v", err)
 		return nil, err
 	}
 
@@ -112,22 +115,33 @@ func (m *Manager) getNextModel(ctx context.Context, role string) (*ModelSelectio
 	models := append([]ModelDefinition{}, m.cached...)
 	m.cacheMu.RUnlock()
 
-	for _, candidate := range models {
+	log.Printf("[DEBUG] Checking %d cached models for role '%s'", len(models), role)
+	
+	for i, candidate := range models {
+		log.Printf("[DEBUG] Model %d: ID=%s, Roles=%v, Status=%s",
+			i, candidate.ID, candidate.Roles, candidate.Status)
+		
 		if !candidate.SupportsRole(role) {
+			log.Printf("[DEBUG] Model %s does not support role '%s'", candidate.ID, role)
 			continue
 		}
 		if !candidate.IsAvailable() {
+			log.Printf("[DEBUG] Model %s is not available", candidate.ID)
 			continue
 		}
 		if m.isExhausted(candidate.ID) {
+			log.Printf("[DEBUG] Model %s is exhausted", candidate.ID)
 			continue
 		}
+		
+		log.Printf("[DEBUG] Selected subscription model: %s for role: %s", candidate.ID, role)
 		return &ModelSelection{
 			Model: candidate,
 			Role:  role,
 		}, nil
 	}
 
+	log.Printf("[DEBUG] No suitable subscription model found for role '%s'. Total models: %d", role, len(models))
 	log.Println("[SUBSCRIPTION] All subscription models exhausted or unavailable")
 	return nil, ErrNoSubscriptionModels
 }
@@ -136,13 +150,19 @@ func (m *Manager) ensureCache(ctx context.Context) error {
 	m.cacheMu.RLock()
 	hasCache := len(m.cached) > 0
 	stale := time.Since(m.lastFetch) >= m.ttl
+	lastFetch := m.lastFetch
 	m.cacheMu.RUnlock()
 
+	log.Printf("[DEBUG] Cache check - Has cache: %t, Stale: %t, Last fetch: %v, TTL: %v",
+		hasCache, stale, lastFetch, m.ttl)
+
 	if hasCache && !stale {
+		log.Printf("[DEBUG] Cache hit - %d models available", len(m.cached))
 		log.Println("[SUBSCRIPTION] Cache hit")
 		return nil
 	}
 
+	log.Printf("[DEBUG] Cache miss or stale - fetching from subscription API at: %s", m.baseURL)
 	log.Println("[SUBSCRIPTION] Cache miss or stale; fetching from subscription API")
 	if err := m.fetch(ctx); err != nil {
 		m.cacheMu.RLock()
@@ -151,6 +171,7 @@ func (m *Manager) ensureCache(ctx context.Context) error {
 			log.Printf("[SUBSCRIPTION] Fetch error (%v) — falling back to cached data", err)
 			return nil
 		}
+		log.Printf("[DEBUG] Fetch failed and no cached data available: %v", err)
 		return err
 	}
 
@@ -166,25 +187,39 @@ func (m *Manager) isExhausted(modelID string) bool {
 
 func (m *Manager) fetch(ctx context.Context) error {
 	endpoint := fmt.Sprintf("%s/api/subscription/v1/models", m.baseURL)
+	log.Printf("[DEBUG] Fetching subscription models from: %s", endpoint)
+	
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
+		log.Printf("[DEBUG] Failed to build request: %v", err)
 		return fmt.Errorf("failed to build subscription fetch request: %w", err)
 	}
 
+	log.Printf("[DEBUG] Sending request to subscription API...")
 	resp, err := m.client.Do(req)
 	if err != nil {
+		log.Printf("[DEBUG] Request failed: %v", err)
 		return fmt.Errorf("request to subscription API failed: %w", err)
 	}
 	defer resp.Body.Close()
 
+	log.Printf("[DEBUG] Subscription API response status: %d", resp.StatusCode)
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 1024))
+		log.Printf("[DEBUG] Error response body: %s", string(body))
 		return fmt.Errorf("subscription API responded with status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
 	}
 
 	var payload ModelListResponse
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		log.Printf("[DEBUG] Failed to decode response: %v", err)
 		return fmt.Errorf("failed to decode subscription response: %w", err)
+	}
+
+	log.Printf("[DEBUG] Successfully decoded %d models from subscription API", len(payload.Models))
+	for i, model := range payload.Models {
+		log.Printf("[DEBUG] Model %d: ID=%s, Name=%s, Roles=%v, Status=%s",
+			i, model.ID, model.Name, model.Roles, model.Status)
 	}
 
 	m.cacheMu.Lock()

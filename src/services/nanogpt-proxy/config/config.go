@@ -54,7 +54,7 @@ func Load() *Config {
 		DBPath:            getEnv("DB_PATH", "~/.mcp/proxy/usage.db"),
 		PromptStrategies:          getEnv("PROMPT_STRATEGIES", "config/prompt_strategies.yaml"),
 		ModelRankingsPath:         getEnv("MODEL_RANKINGS", "data/model_routing.json"),
-		SubscriptionAPIBaseURL:    getEnv("SUBSCRIPTION_API_BASE_URL", "https://subscription.nano-gpt.com/api/v1"),
+		SubscriptionAPIBaseURL:    getEnv("SUBSCRIPTION_API_BASE_URL", "https://subscription.nano-gpt.com"),
 		SubscriptionAPITTLSeconds: getEnvInt("SUBSCRIPTION_API_TTL_SECONDS", 60),
 		MCPServers: map[string]MCPServerConfig{
 			"context-persistence": {

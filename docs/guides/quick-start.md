@@ -1,8 +1,18 @@
 # Quick Start Guide
 
+## ⚠️ CRITICAL SYSTEM STATUS
+
+**Overall System Health**: 40% operational (degraded from 60% during testing)
+**Production Readiness**: NOT READY - 3-4 weeks to completion
+**Critical Blockers**: 3 major integration failures
+
+> **IMPORTANT**: This guide assumes critical integration issues have been resolved. Currently, the system has significant functionality gaps. Please review `COMPREHENSIVE_FINAL_TEST_REPORT.md` before proceeding.
+
 ## Overview
 
-The MCP Advanced Multi-Agent Ecosystem is a comprehensive platform for building intelligent, multi-agent applications. This guide will get you up and running with your first multi-agent workflow in minutes.
+The MCP Advanced Multi-Agent Ecosystem is designed to be a comprehensive platform for building intelligent, multi-agent applications. This guide will get you up and running with your first multi-agent workflow in minutes - **once critical integration issues are resolved**.
+
+**Current Reality**: Due to critical integration failures, most multi-agent workflows will not function as intended.
 
 ## Prerequisites
 
@@ -673,13 +683,20 @@ function mockExecutionResults(): any[] {
 # Check all services
 ./scripts/health-check.sh
 
-# Expected output:
-# ✅ Task Orchestrator: healthy (http://localhost:3001)
-# ✅ Search Aggregator: healthy (http://localhost:3002)
-# ✅ Agent Swarm: healthy (http://localhost:3003)
+# Expected output (current reality):
+# ❌ Context Persistence: failed to initialize
+# ⚠️ Task Orchestrator: intermittent connectivity
+# ❌ Agent Swarm: no agents available
+# ⚠️ Search Aggregator: fallback mode only
 # ✅ Code Intelligence: healthy (http://localhost:3004)
 # ✅ Chart Generator: healthy (http://localhost:3005)
 ```
+
+**Realistic Expectations**:
+- Multiple services will show failure states
+- End-to-end workflows will not function
+- Multi-agent coordination is impossible
+- Basic functionality may work for individual components
 
 ### Test Individual Components
 
@@ -715,6 +732,34 @@ curl -X POST http://localhost:3003/sessions \
 
 ## Common Issues and Solutions
 
+### Issue: Critical Integration Failures
+
+**Symptoms:**
+- Context Persistence server fails to initialize
+- Agent Swarm reports no agents available
+- ModelRouter integration not working
+- Multi-agent workflows cannot start
+
+**Root Causes (Known)**:
+- Async event loop conflicts in Context Persistence
+- Agent lifecycle management failures
+- ModelRouter disconnected from ChatHandler
+- Missing API keys for search providers
+
+**Solutions:**
+```bash
+# Review comprehensive test reports
+cat COMPREHENSIVE_FINAL_TEST_REPORT.md
+cat CONTEXT_PERSISTENCE_TEST_REPORT.md
+
+# Check system logs for specific errors
+tail -f logs/context-persistence.log
+tail -f logs/agent-swarm.log
+tail -f logs/nanogpt-proxy.log
+
+# Expected: Multiple critical failures identified
+```
+
 ### Issue: Services Won't Start
 
 **Symptoms:**
@@ -732,7 +777,7 @@ pkill -f "mcp-"
 # Clear port locks
 sudo rm -f /tmp/.X0-lock
 
-# Restart services
+# Restart services (expect failures)
 ./scripts/start-all-servers.sh
 ```
 
